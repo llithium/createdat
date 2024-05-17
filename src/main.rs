@@ -22,6 +22,10 @@ struct Cli {
     /// Use 12-hour time format instead of 24-hour
     #[arg(short, long)]
     twelve: bool,
+
+    /// Rename all files, not just images
+    #[arg(short, long)]
+    all: bool,
 }
 
 fn main() {
@@ -59,7 +63,8 @@ fn main() {
             .extension()
             .and_then(OsStr::to_str)
             .unwrap_or_default();
-        if !accepted_formats.contains(&file_extension) {
+
+        if !cli.all && !accepted_formats.contains(&file_extension) {
             continue;
         }
         total_images += 1;
@@ -97,14 +102,21 @@ fn main() {
         fs::copy(file.path(), image_destination).unwrap();
         images_renamed += 1;
     }
-    if total_images == 0 {
+    if !cli.all && total_images == 0 {
         remove_dir(renamed_folder).unwrap();
         println!("No images or wrong image formats");
+        return;
     }
 
     let end_time = start_time.elapsed().unwrap();
-    println!(
-        "{}/{} images renamed in {:?}",
-        images_renamed, total_images, end_time
-    )
+    match cli.all {
+        true => println!(
+            "{}/{} files renamed in {:?}",
+            images_renamed, total_images, end_time
+        ),
+        false => println!(
+            "{}/{} images renamed in {:?}",
+            images_renamed, total_images, end_time
+        ),
+    }
 }
