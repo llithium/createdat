@@ -18,6 +18,10 @@ struct Cli {
     /// Keep image's original name as prefix
     #[arg(short, long)]
     keep: bool,
+
+    /// Use 12-hour time format instead of 24-hour
+    #[arg(short, long)]
+    twelve: bool,
 }
 
 fn main() {
@@ -73,7 +77,10 @@ fn main() {
 
         let file_modified_at_system_time = file.metadata().unwrap().modified().unwrap();
         let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
-        let image_modified_at_time = file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S");
+        let image_modified_at_time = match cli.twelve {
+            true => file_modified_at_date_time.format("%Y-%m-%d %I_%M_%S %p"),
+            false => file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S"),
+        };
 
         let image_destination = format!(
             "{}/{}{}{}.{}",
