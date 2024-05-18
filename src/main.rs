@@ -37,7 +37,7 @@ fn main() {
     let mut prefix = String::from("");
 
     if Path::new(renamed_folder).exists() {
-        println!(
+        eprintln!(
             "Folder {} already exists",
             renamed_folder.strip_prefix("./").unwrap()
         );
@@ -93,7 +93,7 @@ fn main() {
         );
 
         if Path::new(&image_destination).exists() {
-            println!(
+            eprintln!(
                 "Duplicate date: {}{}{}.{} already exists",
                 prefix, image_name, image_modified_at_time, file_extension
             );
@@ -104,7 +104,7 @@ fn main() {
     }
     if !cli.all && total_images == 0 {
         remove_dir(renamed_folder).unwrap();
-        println!("No images or wrong image formats");
+        eprintln!("No images or wrong image formats");
         return;
     }
 
