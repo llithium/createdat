@@ -59,10 +59,13 @@ fn main() {
         }
 
         let file_name = file.file_name().into_string().unwrap();
-        let file_extension = Path::new(&file_path)
-            .extension()
-            .and_then(OsStr::to_str)
-            .unwrap_or_default();
+        let file_extension = match file_name.starts_with(".") {
+            true => file_name.strip_prefix(".").unwrap(),
+            false => Path::new(&file_path)
+                .extension()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default(),
+        };
 
         if !cli.all && !accepted_formats.contains(&file_extension) {
             continue;
