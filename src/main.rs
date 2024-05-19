@@ -82,7 +82,8 @@ fn main() {
         total_images += 1;
 
         if let Some(entered_prefix) = cli.prefix.as_deref() {
-            prefix = String::from(entered_prefix).trim().to_owned() + " "
+            prefix =
+                sanitize_filename::sanitize(String::from(entered_prefix).trim()).to_owned() + " "
         }
         if cli.keep {
             image_name = file_name
