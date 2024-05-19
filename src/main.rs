@@ -39,13 +39,22 @@ fn main() {
     if Path::new(renamed_folder).exists() {
         eprintln!(
             "Folder {} already exists",
-            renamed_folder.strip_prefix("./").unwrap()
+            renamed_folder.strip_prefix("./").unwrap_or(renamed_folder)
         );
         return;
     }
-    create_dir(renamed_folder).unwrap();
+    if let Err(err) = create_dir(renamed_folder) {
+        eprintln!("Error creating directory: {}", err);
+        return;
+    }
 
-    let files = read_dir("./").unwrap();
+    let files = match read_dir("./") {
+        Ok(files) => files,
+        Err(err) => {
+            eprintln!("Error reading directory: {}", err);
+            return;
+        }
+    };
 
     let mut images_renamed: u32 = 0;
     let mut total_images: u32 = 0;
@@ -59,8 +68,8 @@ fn main() {
         }
 
         let file_name = file.file_name().into_string().unwrap();
-        let file_extension = match file_name.starts_with(".") {
-            true => file_name.strip_prefix(".").unwrap(),
+        let file_extension = match file_name.starts_with('.') {
+            true => file_name.strip_prefix('.').unwrap(),
             false => Path::new(&file_path)
                 .extension()
                 .and_then(OsStr::to_str)
@@ -102,16 +111,33 @@ fn main() {
             );
             continue;
         };
-        fs::copy(file.path(), image_destination).unwrap();
-        images_renamed += 1;
+        match fs::copy(file.path(), image_destination) {
+            Ok(_) => images_renamed += 1,
+            Err(err) => {
+                eprintln!("{}", err);
+                if let Err(err) = remove_dir(renamed_folder) {
+                    eprintln!("{}", err)
+                };
+                return;
+            }
+        }
     }
-    if !cli.all && total_images == 0 {
-        remove_dir(renamed_folder).unwrap();
-        eprintln!("No images or wrong image formats");
+
+    if images_renamed == 0 {
+        if let Err(err) = remove_dir(renamed_folder) {
+            eprintln!("{err}")
+        };
+        match cli.all {
+            true => eprintln!("No files found"),
+            false => eprintln!("No images or wrong image formats"),
+        }
         return;
     }
 
-    let end_time = start_time.elapsed().unwrap();
+    let end_time = start_time.elapsed().unwrap_or_else(|err| {
+        eprintln!("Error calculating time{}", err);
+        std::time::Duration::default()
+    });
     match cli.all {
         true => println!(
             "{}/{} files renamed in {:?}",
