@@ -1,5 +1,5 @@
 [package]
-name = "createdat_rust"
+name = "createdat-rust"
 version = "0.1.0"
 edition = "2021"
 
