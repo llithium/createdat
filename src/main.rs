@@ -1,7 +1,9 @@
 use std::{
+    env::current_dir,
+    error::Error,
     ffi::OsStr,
-    fs::{self, create_dir, read_dir, remove_dir},
-    path::Path,
+    fs::{self, create_dir_all, read_dir, remove_dir},
+    path::{Path, PathBuf},
     time::SystemTime,
 };
 
@@ -28,31 +30,36 @@ struct Cli {
     all: bool,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let start_time = SystemTime::now();
     let cli = Cli::parse();
-    let renamed_folder = "./renamed";
+    let renamed_folder: PathBuf = PathBuf::from("renamed");
     let accepted_formats = ["png", "jpg", "jpeg", "tiff", "webp", "heif"];
     let mut image_name = String::from("");
     let mut prefix = String::from("");
 
-    if Path::new(renamed_folder).exists() {
-        eprintln!(
-            "Folder {} already exists",
-            renamed_folder.strip_prefix("./").unwrap_or(renamed_folder)
-        );
-        return;
+    if renamed_folder.exists() {
+        match renamed_folder.read_dir()?.next().is_none() {
+            true => (),
+            false => {
+                eprintln!(
+                    "Folder {} already exists",
+                    renamed_folder.to_str().unwrap_or_default()
+                );
+                return Ok(());
+            }
+        }
     }
-    if let Err(err) = create_dir(renamed_folder) {
+    if let Err(err) = create_dir_all(renamed_folder.clone()) {
         eprintln!("Error creating directory: {}", err);
-        return;
+        return Err(err.into());
     }
 
-    let files = match read_dir("./") {
+    let files = match read_dir(current_dir()?) {
         Ok(files) => files,
         Err(err) => {
             eprintln!("Error reading directory: {}", err);
-            return;
+            return Err(err.into());
         }
     };
 
@@ -60,10 +67,10 @@ fn main() {
     let mut total_images: u32 = 0;
 
     for file_result in files {
-        let file = file_result.unwrap();
+        let file = file_result?;
         let file_path = file.path();
 
-        if file.metadata().unwrap().is_dir() {
+        if file.metadata()?.is_dir() {
             continue;
         }
 
@@ -93,7 +100,7 @@ fn main() {
                 + " "
         }
 
-        let file_modified_at_system_time = file.metadata().unwrap().modified().unwrap();
+        let file_modified_at_system_time = file.metadata()?.modified()?;
         let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
         let image_modified_at_time = match cli.twelve {
             true => file_modified_at_date_time.format("%Y-%m-%d %I_%M_%S %p"),
@@ -102,7 +109,11 @@ fn main() {
 
         let image_destination = format!(
             "{}/{}{}{}.{}",
-            renamed_folder, prefix, image_name, image_modified_at_time, file_extension
+            renamed_folder.to_str().unwrap_or_default(),
+            prefix,
+            image_name,
+            image_modified_at_time,
+            file_extension
         );
 
         if Path::new(&image_destination).exists() {
@@ -119,7 +130,7 @@ fn main() {
                 if let Err(err) = remove_dir(renamed_folder) {
                     eprintln!("{}", err)
                 };
-                return;
+                return Err(err.into());
             }
         }
     }
@@ -132,7 +143,7 @@ fn main() {
             true => eprintln!("No files found"),
             false => eprintln!("No images or wrong image formats"),
         }
-        return;
+        return Ok(());
     }
 
     let end_time = start_time.elapsed().unwrap_or_else(|err| {
@@ -140,13 +151,13 @@ fn main() {
         std::time::Duration::default()
     });
     match cli.all {
-        true => println!(
+        true => Ok(println!(
             "{}/{} files renamed in {:?}",
             images_renamed, total_images, end_time
-        ),
-        false => println!(
+        )),
+        false => Ok(println!(
             "{}/{} images renamed in {:?}",
             images_renamed, total_images, end_time
-        ),
+        )),
     }
 }
