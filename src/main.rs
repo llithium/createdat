@@ -15,7 +15,11 @@ use clap::Parser;
 #[command(version, about, long_about = None)]
 struct Cli {
     /// Optional prefix for renamed images
-    prefix: Option<String>,
+    name: Option<String>,
+
+    /// Put custom name after the date
+    #[arg(short, long)]
+    suffix: bool,
 
     /// Keep image's original name as prefix
     #[arg(short, long)]
@@ -36,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let renamed_folder: PathBuf = PathBuf::from("renamed");
     let accepted_formats = ["png", "jpg", "jpeg", "tiff", "webp", "heif"];
     let mut image_name = String::from("");
-    let mut prefix = String::from("");
+    let mut name = String::from("");
 
     if renamed_folder.exists() {
         match renamed_folder.read_dir()?.next().is_none() {
@@ -88,9 +92,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         total_images += 1;
 
-        if let Some(entered_prefix) = cli.prefix.as_deref() {
-            prefix =
-                sanitize_filename::sanitize(String::from(entered_prefix).trim()).to_owned() + " "
+        if let Some(entered_prefix) = cli.name.as_deref() {
+            name = sanitize_filename::sanitize(String::from(entered_prefix).trim()).to_owned() + " "
         }
         if cli.keep {
             image_name = file_name
@@ -107,19 +110,29 @@ fn main() -> Result<(), Box<dyn Error>> {
             false => file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S"),
         };
 
-        let image_destination = format!(
-            "{}/{}{}{}.{}",
-            renamed_folder.to_str().unwrap_or_default(),
-            prefix,
-            image_name,
-            image_modified_at_time,
-            file_extension
-        );
+        let image_destination = match cli.suffix {
+            true => PathBuf::from(format!(
+                "{}/{}{} {}.{}",
+                renamed_folder.to_str().unwrap_or_default(),
+                image_name,
+                image_modified_at_time,
+                name.trim_end(),
+                file_extension
+            )),
+            false => PathBuf::from(format!(
+                "{}/{}{}{}.{}",
+                renamed_folder.to_str().unwrap_or_default(),
+                name,
+                image_name,
+                image_modified_at_time,
+                file_extension
+            )),
+        };
 
         if Path::new(&image_destination).exists() {
             eprintln!(
                 "Duplicate date: {}{}{}.{} already exists",
-                prefix, image_name, image_modified_at_time, file_extension
+                name, image_name, image_modified_at_time, file_extension
             );
             continue;
         };
