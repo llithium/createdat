@@ -32,12 +32,19 @@ struct Cli {
     /// Rename all files, not just images
     #[arg(short, long)]
     all: bool,
+
+    /// Set the name of the folder for renamed images (default: Renamed)
+    #[arg(short, long, value_name = "Name")]
+    folder: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let start_time = SystemTime::now();
     let cli = Cli::parse();
-    let renamed_folder: PathBuf = PathBuf::from("renamed");
+    let renamed_folder: PathBuf = match cli.folder {
+        Some(name) => name,
+        None => PathBuf::from("renamed"),
+    };
     let accepted_formats = ["png", "jpg", "jpeg", "tiff", "webp", "heif"];
     let mut image_name = String::from("");
     let mut name = String::from("");
