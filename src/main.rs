@@ -4,11 +4,13 @@ use std::{
     ffi::OsStr,
     fs::{self, create_dir_all, read_dir, remove_dir},
     path::{Path, PathBuf},
+    str::FromStr,
     time::SystemTime,
 };
 
 use chrono::{DateTime, Local};
 use clap::Parser;
+use mime_guess::Mime;
 
 /// Rename images with the date they were created
 #[derive(Parser)]
@@ -45,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(name) => name,
         None => PathBuf::from("renamed"),
     };
-    let accepted_formats = ["png", "jpg", "jpeg", "tiff", "webp", "heif"];
+
     let mut image_name = String::from("");
     let mut name = String::from("");
 
@@ -94,7 +96,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .unwrap_or_default(),
         };
 
-        if !cli.all && !accepted_formats.contains(&file_extension) {
+        if !cli.all
+            && !mime_guess::from_path(&file_path)
+                .first()
+                .unwrap_or(Mime::from_str("Unknown/Unknown")?)
+                .to_string()
+                .starts_with("image")
+        {
             continue;
         }
         total_images += 1;
