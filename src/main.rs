@@ -11,6 +11,7 @@ use std::{
 use chrono::{DateTime, Local};
 use clap::Parser;
 use mime_guess::Mime;
+use owo_colors::OwoColorize;
 
 /// Rename images with the date they were created
 #[derive(Parser)]
@@ -146,8 +147,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         if Path::new(&image_destination).exists() {
             eprintln!(
-                "Duplicate date: {}{}{}.{} already exists",
-                name, image_name, image_modified_at_time, file_extension
+                "{}{}{}",
+                "Duplicate creation time:".yellow(),
+                file_modified_at_date_time
+                    .format("%Y/%m/%d %H:%M:%S %z")
+                    .yellow(),
+                " File skipped".yellow()
             );
             continue;
         };
