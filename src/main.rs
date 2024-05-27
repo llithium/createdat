@@ -88,9 +88,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             continue;
         }
 
-        let file_name = file.file_name().into_string().unwrap();
+        let file_name = match file.file_name().into_string() {
+            Ok(name_string) => name_string,
+            Err(_) => {
+                eprintln!(
+                    "Error converting file name to string {:?}. File skipped",
+                    file_path
+                );
+                continue;
+            }
+        };
         let file_extension = match file_name.starts_with('.') {
-            true => file_name.strip_prefix('.').unwrap(),
+            true => match file_name.strip_prefix('.') {
+                Some(extension) => extension,
+                None => {
+                    eprintln!(
+                        "Error getting file extension from {}. File skipped",
+                        file_name
+                    );
+                    continue;
+                }
+            },
             false => Path::new(&file_path)
                 .extension()
                 .and_then(OsStr::to_str)
@@ -147,12 +165,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         if Path::new(&image_destination).exists() {
             eprintln!(
-                "{}{}{}",
+                "{}{} {} Skipped",
                 "Duplicate creation time:".yellow(),
                 file_modified_at_date_time
                     .format("%Y/%m/%d %H:%M:%S %z")
                     .yellow(),
-                " File skipped".yellow()
+                file_name
             );
             continue;
         };
