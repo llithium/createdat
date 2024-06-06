@@ -10,6 +10,7 @@ use std::{
 
 use chrono::{DateTime, Local};
 use clap::Parser;
+use inquire::MultiSelect;
 use mime_guess::Mime;
 use owo_colors::OwoColorize;
 
@@ -20,9 +21,9 @@ struct Cli {
     /// Optional prefix for renamed images
     name: Option<String>,
 
-    /// Put custom name after the date
+    /// Choose which files to rename based on file extension
     #[arg(short, long)]
-    suffix: bool,
+    interactive: bool,
 
     /// Keep image's original name as prefix
     #[arg(short, long)]
@@ -32,13 +33,17 @@ struct Cli {
     #[arg(short, long)]
     twelve: bool,
 
-    /// Rename all files, not just images
-    #[arg(short, long)]
-    all: bool,
-
     /// Set the name of the folder for renamed images (default: Renamed)
     #[arg(short, long, value_name = "Name")]
     folder: Option<PathBuf>,
+
+    /// Put custom name after the date
+    #[arg(short, long)]
+    suffix: bool,
+
+    /// Rename all files, not just images
+    #[arg(short, long)]
+    all: bool,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -80,6 +85,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut images_renamed: u32 = 0;
     let mut total_images: u32 = 0;
 
+    let mut file_extension_options: Vec<String> = vec![];
+
     for file_result in files {
         let file = file_result?;
         let file_path = file.path();
@@ -98,6 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             }
         };
+
         let file_extension = match file_name.starts_with('.') {
             true => match file_name.strip_prefix('.') {
                 Some(extension) => extension,
@@ -114,8 +122,73 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .and_then(OsStr::to_str)
                 .unwrap_or_default(),
         };
+        match file_extension_options.contains(&file_extension.to_owned()) {
+            true => continue,
+            false => file_extension_options.push(String::from(file_extension)),
+        }
+    }
 
+    let extension_selections = match cli.interactive {
+        true => {
+            let ans =
+                MultiSelect::new("Select file types to rename:", file_extension_options).prompt();
+
+            match ans {
+                Ok(selections) => selections,
+                Err(err) => return Err(err.into()),
+            }
+        }
+        false => vec![String::from("")],
+    };
+
+    let files = match read_dir(current_dir()?) {
+        Ok(files) => files,
+        Err(err) => {
+            eprintln!("Error reading directory: {}", err);
+            return Err(err.into());
+        }
+    };
+
+    for file_result in files {
+        let file = file_result?;
+        let file_path = file.path();
+
+        if file.metadata()?.is_dir() {
+            continue;
+        }
+
+        let file_name = match file.file_name().into_string() {
+            Ok(name_string) => name_string,
+            Err(_) => {
+                eprintln!(
+                    "Error converting file name to string {:?}. File skipped",
+                    file_path
+                );
+                continue;
+            }
+        };
+
+        let file_extension = match file_name.starts_with('.') {
+            true => match file_name.strip_prefix('.') {
+                Some(extension) => extension,
+                None => {
+                    eprintln!(
+                        "Error getting file extension from {}. File skipped",
+                        file_name
+                    );
+                    continue;
+                }
+            },
+            false => Path::new(&file_path)
+                .extension()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default(),
+        };
+        if cli.interactive && !extension_selections.contains(&file_extension.to_owned()) {
+            continue;
+        }
         if !cli.all
+            && !cli.interactive
             && !mime_guess::from_path(&file_path)
                 .first()
                 .unwrap_or(Mime::from_str("Unknown/Unknown")?)
@@ -190,6 +263,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Err(err) = remove_dir(renamed_folder) {
             eprintln!("{err}")
         };
+        if cli.interactive {
+            eprintln!("No files selected");
+            return Ok(());
+        }
         match cli.all {
             true => eprintln!("No files found"),
             false => eprintln!("No images or wrong image formats"),
@@ -201,7 +278,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("Error calculating time{}", err);
         std::time::Duration::default()
     });
-    match cli.all {
+    match cli.all || cli.interactive {
         true => Ok(println!(
             "{}/{} files renamed in {:?}",
             images_renamed, total_images, end_time
