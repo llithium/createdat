@@ -57,23 +57,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut image_name = String::from("");
     let mut name = String::from("");
 
-    if renamed_folder.exists() {
-        match renamed_folder.read_dir()?.next().is_none() {
-            true => (),
-            false => {
-                eprintln!(
-                    "Folder {} already exists",
-                    renamed_folder.to_str().unwrap_or_default()
-                );
-                return Ok(());
-            }
-        }
-    }
-    if let Err(err) = create_dir_all(renamed_folder.clone()) {
-        eprintln!("Error creating directory: {}", err);
-        return Err(err.into());
-    }
-
     let files = match read_dir(current_dir()?) {
         Ok(files) => files,
         Err(err) => {
@@ -148,6 +131,23 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err(err.into());
         }
     };
+
+    if renamed_folder.exists() {
+        match renamed_folder.read_dir()?.next().is_none() {
+            true => (),
+            false => {
+                eprintln!(
+                    "Folder {} already exists",
+                    renamed_folder.to_str().unwrap_or_default()
+                );
+                return Ok(());
+            }
+        }
+    }
+    if let Err(err) = create_dir_all(renamed_folder.clone()) {
+        eprintln!("Error creating directory: {}", err);
+        return Err(err.into());
+    }
 
     for file_result in files {
         let file = file_result?;
@@ -252,7 +252,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(err) => {
                 eprintln!("{}", err);
                 if let Err(err) = remove_dir(renamed_folder) {
-                    eprintln!("{}", err)
+                    eprintln!("Error copying files: {}", err)
                 };
                 return Err(err.into());
             }
