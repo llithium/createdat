@@ -35,7 +35,7 @@ struct Cli {
 
     /// Set the name of the folder for renamed images (default: Renamed)
     #[arg(short, long, value_name = "Name")]
-    folder: Option<PathBuf>,
+    folder: Option<String>,
 
     /// Put custom name after the date
     #[arg(short, long)]
@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let start_time = SystemTime::now();
     let cli = Cli::parse();
     let renamed_folder: PathBuf = match cli.folder {
-        Some(name) => name,
+        Some(name) => PathBuf::from(sanitize_filename::sanitize(name.trim())),
         None => PathBuf::from("renamed"),
     };
 
