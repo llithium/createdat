@@ -47,7 +47,6 @@ struct Cli {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let start_time = SystemTime::now();
     let cli = Cli::parse();
     let renamed_folder: PathBuf = match cli.folder {
         Some(name) => PathBuf::from(sanitize_filename::sanitize(name.trim())),
@@ -123,6 +122,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         false => vec![String::from("")],
     };
+
+    let start_time = SystemTime::now();
 
     let files = match read_dir(current_dir()?) {
         Ok(files) => files,
