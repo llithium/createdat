@@ -23,7 +23,7 @@ struct Cli {
 
     /// Choose which files to rename based on file extension
     #[arg(short, long)]
-    interactive: bool,
+    extension: bool,
 
     /// Keep image's original name as prefix
     #[arg(short, long)]
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let extension_selections = match cli.interactive {
+    let extension_selections = match cli.extension {
         true => {
             let ans =
                 MultiSelect::new("Select file types to rename:", file_extension_options).prompt();
@@ -185,11 +185,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .and_then(OsStr::to_str)
                 .unwrap_or_default(),
         };
-        if cli.interactive && !extension_selections.contains(&file_extension.to_owned()) {
+        if cli.extension && !extension_selections.contains(&file_extension.to_owned()) {
             continue;
         }
         if !cli.all
-            && !cli.interactive
+            && !cli.extension
             && !mime_guess::from_path(&file_path)
                 .first()
                 .unwrap_or(Mime::from_str("Unknown/Unknown")?)
@@ -264,7 +264,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Err(err) = remove_dir(renamed_folder) {
             eprintln!("{err}")
         };
-        if cli.interactive {
+        if cli.extension {
             eprintln!("No files selected");
             return Ok(());
         }
@@ -279,7 +279,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("Error calculating time{}", err);
         std::time::Duration::default()
     });
-    match cli.all || cli.interactive {
+    match cli.all || cli.extension {
         true => Ok(println!(
             "{}/{} files renamed in {:?}",
             images_renamed, total_images, end_time
