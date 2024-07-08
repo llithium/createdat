@@ -10,7 +10,10 @@ use std::{
 
 use chrono::{DateTime, Local};
 use clap::Parser;
-use inquire::MultiSelect;
+use inquire::{
+    ui::{RenderConfig, Styled},
+    MultiSelect,
+};
 use mime_guess::Mime;
 use owo_colors::OwoColorize;
 
@@ -47,6 +50,7 @@ struct Cli {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    inquire::set_global_render_config(get_render_config());
     let cli = Cli::parse();
     let renamed_folder: PathBuf = match cli.folder {
         Some(name) => PathBuf::from(sanitize_filename::sanitize(name.trim())),
@@ -288,5 +292,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             "{}/{} images renamed in {:?}",
             images_renamed, total_images, end_time
         )),
+    }
+}
+
+fn get_render_config() -> RenderConfig<'static> {
+    RenderConfig::<'_> {
+        unselected_checkbox: Styled::new("○"),
+        selected_checkbox: Styled::new("●"),
+        ..Default::default()
     }
 }
