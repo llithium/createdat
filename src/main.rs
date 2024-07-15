@@ -48,6 +48,10 @@ struct Cli {
     #[arg(short, long)]
     suffix: bool,
 
+    /// Preview the name format of renamed files
+    #[arg(short, long)]
+    preview: bool,
+
     /// Rename all files, not just images
     #[arg(short, long)]
     all: bool,
@@ -141,23 +145,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    if renamed_folder.exists() {
-        match renamed_folder.read_dir()?.next().is_none() {
-            true => (),
-            false => {
-                eprintln!(
-                    "Folder {} already exists",
-                    renamed_folder.to_str().unwrap_or_default()
-                );
-                return Ok(());
+    if !cli.preview {
+        if renamed_folder.exists() {
+            match renamed_folder.read_dir()?.next().is_none() {
+                true => (),
+                false => {
+                    eprintln!(
+                        "Folder {} already exists",
+                        renamed_folder.to_str().unwrap_or_default()
+                    );
+                    return Ok(());
+                }
             }
         }
+        if let Err(err) = create_dir_all(renamed_folder.clone()) {
+            eprintln!("Error creating directory: {}", err);
+            return Err(err.into());
+        }
     }
-    if let Err(err) = create_dir_all(renamed_folder.clone()) {
-        eprintln!("Error creating directory: {}", err);
-        return Err(err.into());
-    }
-
     for file_result in files {
         let file = file_result?;
         let file_path = file.path();
@@ -231,10 +236,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             image_name = match cli.front {
                 true => {
                     " ".to_owned()
-                        + &file_name
+                        + file_name
                             .strip_suffix(&format!(".{}", file_extension))
                             .unwrap_or_default()
-                            .to_string()
                 }
                 false => {
                     file_name
@@ -293,6 +297,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 )),
             },
         };
+
+        if cli.preview {
+            println!("{:?}", image_destination);
+            return Ok(());
+        }
 
         if Path::new(&image_destination).exists() {
             eprintln!(
