@@ -28,6 +28,10 @@ struct Cli {
     #[arg(short, long)]
     extension: bool,
 
+    /// Put date in front of filename
+    #[arg(short, long)]
+    front: bool,
+
     /// Keep image's original name as prefix
     #[arg(short, long)]
     keep: bool,
@@ -205,14 +209,41 @@ fn main() -> Result<(), Box<dyn Error>> {
         total_images += 1;
 
         if let Some(entered_prefix) = cli.name.as_deref() {
-            name = sanitize_filename::sanitize(String::from(entered_prefix).trim()).to_owned() + " "
+            name = match cli.front {
+                true => {
+                    " ".to_owned()
+                        + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
+                            .to_owned()
+                }
+                false => match cli.suffix {
+                    true => {
+                        " ".to_owned()
+                            + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
+                    }
+                    false => {
+                        sanitize_filename::sanitize(String::from(entered_prefix).trim()).to_owned()
+                            + " "
+                    }
+                },
+            }
         }
         if cli.keep {
-            image_name = file_name
-                .strip_suffix(&format!(".{}", file_extension))
-                .unwrap_or_default()
-                .to_string()
-                + " "
+            image_name = match cli.front {
+                true => {
+                    " ".to_owned()
+                        + &file_name
+                            .strip_suffix(&format!(".{}", file_extension))
+                            .unwrap_or_default()
+                            .to_string()
+                }
+                false => {
+                    file_name
+                        .strip_suffix(&format!(".{}", file_extension))
+                        .unwrap_or_default()
+                        .to_string()
+                        + " "
+                }
+            }
         }
 
         let file_modified_at_system_time = file.metadata()?.modified()?;
@@ -223,22 +254,44 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         let image_destination = match cli.suffix {
-            true => PathBuf::from(format!(
-                "{}/{}{} {}.{}",
-                renamed_folder.to_str().unwrap_or_default(),
-                image_name,
-                image_modified_at_time,
-                name.trim_end(),
-                file_extension
-            )),
-            false => PathBuf::from(format!(
-                "{}/{}{}{}.{}",
-                renamed_folder.to_str().unwrap_or_default(),
-                name,
-                image_name,
-                image_modified_at_time,
-                file_extension
-            )),
+            true => match cli.front {
+                true => PathBuf::from(format!(
+                    "{}/{}{}{}.{}",
+                    renamed_folder.to_str().unwrap_or_default(),
+                    image_modified_at_time,
+                    image_name,
+                    name.trim_end(),
+                    file_extension
+                )),
+
+                false => PathBuf::from(format!(
+                    "{}/{}{}{}.{}",
+                    renamed_folder.to_str().unwrap_or_default(),
+                    image_name,
+                    image_modified_at_time,
+                    name.trim_end(),
+                    file_extension
+                )),
+            },
+            false => match cli.front {
+                true => PathBuf::from(format!(
+                    "{}/{}{}{}.{}",
+                    renamed_folder.to_str().unwrap_or_default(),
+                    image_modified_at_time,
+                    name,
+                    image_name,
+                    file_extension
+                )),
+
+                false => PathBuf::from(format!(
+                    "{}/{}{}{}.{}",
+                    renamed_folder.to_str().unwrap_or_default(),
+                    name,
+                    image_name,
+                    image_modified_at_time,
+                    file_extension
+                )),
+            },
         };
 
         if Path::new(&image_destination).exists() {
