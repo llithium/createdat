@@ -81,44 +81,46 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut file_extension_options: Vec<String> = vec![];
 
-    for file_result in files {
-        let file = file_result?;
-        let file_path = file.path();
+    if cli.extension {
+        for file_result in files {
+            let file = file_result?;
+            let file_path = file.path();
 
-        if file.metadata()?.is_dir() {
-            continue;
-        }
-
-        let file_name = match file.file_name().into_string() {
-            Ok(name_string) => name_string,
-            Err(_) => {
-                eprintln!(
-                    "Error converting file name to string {:?}. File skipped",
-                    file_path
-                );
+            if file.metadata()?.is_dir() {
                 continue;
             }
-        };
 
-        let file_extension = match file_name.starts_with('.') {
-            true => match file_name.strip_prefix('.') {
-                Some(extension) => extension,
-                None => {
+            let file_name = match file.file_name().into_string() {
+                Ok(name_string) => name_string,
+                Err(_) => {
                     eprintln!(
-                        "Error getting file extension from {}. File skipped",
-                        file_name
+                        "Error converting file name to string {:?}. File skipped",
+                        file_path
                     );
                     continue;
                 }
-            },
-            false => Path::new(&file_path)
-                .extension()
-                .and_then(OsStr::to_str)
-                .unwrap_or_default(),
-        };
-        match file_extension_options.contains(&file_extension.to_owned()) {
-            true => continue,
-            false => file_extension_options.push(String::from(file_extension)),
+            };
+
+            let file_extension = match file_name.starts_with('.') {
+                true => match file_name.strip_prefix('.') {
+                    Some(extension) => extension,
+                    None => {
+                        eprintln!(
+                            "Error getting file extension from {}. File skipped",
+                            file_name
+                        );
+                        continue;
+                    }
+                },
+                false => Path::new(&file_path)
+                    .extension()
+                    .and_then(OsStr::to_str)
+                    .unwrap_or_default(),
+            };
+            match file_extension_options.contains(&file_extension.to_owned()) {
+                true => continue,
+                false => file_extension_options.push(String::from(file_extension)),
+            }
         }
     }
 
@@ -163,6 +165,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err(err.into());
         }
     }
+
     for file_result in files {
         let file = file_result?;
         let file_path = file.path();
