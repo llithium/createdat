@@ -41,7 +41,7 @@ struct Cli {
     twelve: bool,
 
     /// Set the name of the folder for renamed images (default: Renamed)
-    #[arg(short, long, value_name = "Name")]
+    #[arg(short = 'F', long, value_name = "Name")]
     folder: Option<String>,
 
     /// Put custom name after the date
