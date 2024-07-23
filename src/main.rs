@@ -40,6 +40,10 @@ struct Cli {
     #[arg(short, long)]
     twelve: bool,
 
+    /// Date without time
+    #[arg(short, long)]
+    date: bool,
+
     /// Set the name of the folder for renamed images (default: Renamed)
     #[arg(short = 'F', long, value_name = "Name")]
     folder: Option<String>,
@@ -255,9 +259,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let file_modified_at_system_time = file.metadata()?.modified()?;
         let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
-        let image_modified_at_time = match cli.twelve {
-            true => file_modified_at_date_time.format("%Y-%m-%d %I_%M_%S %p"),
-            false => file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S"),
+        let image_modified_at_time = match cli.date {
+            true => file_modified_at_date_time.format("%Y-%m-%d"),
+            false => match cli.twelve {
+                true => file_modified_at_date_time.format("%Y-%m-%d %I_%M_%S %p"),
+                false => file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S"),
+            },
         };
 
         let image_destination = match cli.suffix {
@@ -339,7 +346,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         match cli.all {
             true => eprintln!("No files found"),
-            false => eprintln!("No images or wrong image formats"),
+            false => {
+                eprintln!("No images or wrong image formats. (Use --all to rename any files found)")
+            }
         }
         return Ok(());
     }
