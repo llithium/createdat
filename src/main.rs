@@ -2,9 +2,9 @@ use std::{
     env::current_dir,
     error::Error,
     ffi::OsStr,
-    fs::{self, create_dir_all, read_dir, remove_dir},
     path::{Path, PathBuf},
     str::FromStr,
+    sync::Arc,
     time::SystemTime,
 };
 
@@ -16,6 +16,12 @@ use inquire::{
 };
 use mime_guess::Mime;
 use owo_colors::OwoColorize;
+use tokio::{
+    fs::{self, create_dir_all, read_dir, remove_dir},
+    sync::{Mutex, Semaphore},
+    task::JoinHandle,
+};
+static PERMITS: Semaphore = Semaphore::const_new(15);
 
 /// Rename images with the date they were created
 #[derive(Parser)]
@@ -60,19 +66,19 @@ struct Cli {
     #[arg(short, long)]
     all: bool,
 }
-
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     inquire::set_global_render_config(get_render_config());
-    let cli = Cli::parse();
-    let renamed_folder: PathBuf = match cli.folder {
+    let cli = Arc::new(Cli::parse());
+    let renamed_folder: PathBuf = match cli.folder.as_deref() {
         Some(name) => PathBuf::from(sanitize_filename::sanitize(name.trim())),
         None => PathBuf::from("renamed"),
     };
 
-    let mut image_name = String::from("");
-    let mut name = String::from("");
+    let image_name = String::from("");
+    let name = String::from("");
 
-    let files = match read_dir(current_dir()?) {
+    let mut files = match read_dir(current_dir()?).await {
         Ok(files) => files,
         Err(err) => {
             eprintln!("Error reading directory: {}", err);
@@ -80,17 +86,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let mut images_renamed: u32 = 0;
-    let mut total_images: u32 = 0;
-
     let mut file_extension_options: Vec<String> = vec![];
 
     if cli.extension {
-        for file_result in files {
-            let file = file_result?;
+        while let Ok(Some(file)) = files.next_entry().await {
             let file_path = file.path();
 
-            if file.metadata()?.is_dir() {
+            if file.metadata().await.unwrap().is_dir() {
                 continue;
             }
 
@@ -143,7 +145,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let start_time = SystemTime::now();
 
-    let files = match read_dir(current_dir()?) {
+    let mut files = match read_dir(current_dir()?).await {
         Ok(files) => files,
         Err(err) => {
             eprintln!("Error reading directory: {}", err);
@@ -164,180 +166,200 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        if let Err(err) = create_dir_all(renamed_folder.clone()) {
+        if let Err(err) = create_dir_all(renamed_folder.clone()).await {
             eprintln!("Error creating directory: {}", err);
             return Err(err.into());
         }
     }
 
-    for file_result in files {
-        let file = file_result?;
-        let file_path = file.path();
+    let total_images: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
+    let images_renamed: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
+    let renamed_folder = Arc::new(renamed_folder);
+    let cli = Arc::clone(&cli);
+    let mut tasks: Vec<JoinHandle<()>> = vec![];
 
-        if file.metadata()?.is_dir() {
-            continue;
-        }
+    while let Ok(Some(file)) = files.next_entry().await {
+        let total_images = Arc::clone(&total_images);
+        let images_renamed = Arc::clone(&images_renamed);
+        let renamed_folder = Arc::clone(&renamed_folder);
+        let cli = Arc::clone(&cli);
+        let extension_selections = extension_selections.clone();
+        let mut name = name.clone();
+        let mut image_name = image_name.clone();
+        let task = tokio::task::spawn(async move {
+            let _permit = PERMITS.acquire().await.unwrap();
+            let file_path = file.path();
 
-        let file_name = match file.file_name().into_string() {
-            Ok(name_string) => name_string,
-            Err(_) => {
-                eprintln!(
-                    "Error converting file name to string {:?}. File skipped",
-                    file_path
-                );
-                continue;
+            if file.metadata().await.unwrap().is_dir() {
+                return;
             }
-        };
 
-        let file_extension = match file_name.starts_with('.') {
-            true => match file_name.strip_prefix('.') {
-                Some(extension) => extension,
-                None => {
+            let file_name = match file.file_name().into_string() {
+                Ok(name_string) => name_string,
+                Err(_) => {
                     eprintln!(
-                        "Error getting file extension from {}. File skipped",
-                        file_name
+                        "Error converting file name to string {:?}. File skipped",
+                        file_path
                     );
-                    continue;
+                    return;
                 }
-            },
-            false => Path::new(&file_path)
-                .extension()
-                .and_then(OsStr::to_str)
-                .unwrap_or_default(),
-        };
-        if cli.extension && !extension_selections.contains(&file_extension.to_owned()) {
-            continue;
-        }
-        if !cli.all
-            && !cli.extension
-            && !mime_guess::from_path(&file_path)
-                .first()
-                .unwrap_or(Mime::from_str("Unknown/Unknown")?)
-                .to_string()
-                .starts_with("image")
-        {
-            continue;
-        }
-        total_images += 1;
+            };
 
-        if let Some(entered_prefix) = cli.name.as_deref() {
-            name = match cli.front {
-                true => {
-                    " ".to_owned()
-                        + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
-                            .to_owned()
-                }
-                false => match cli.suffix {
+            let file_extension = match file_name.starts_with('.') {
+                true => match file_name.strip_prefix('.') {
+                    Some(extension) => extension,
+                    None => {
+                        eprintln!(
+                            "Error getting file extension from {}. File skipped",
+                            file_name
+                        );
+                        return;
+                    }
+                },
+                false => Path::new(&file_path)
+                    .extension()
+                    .and_then(OsStr::to_str)
+                    .unwrap_or_default(),
+            };
+            if cli.extension && !extension_selections.contains(&file_extension.to_owned()) {
+                return;
+            }
+            if !cli.all
+                && !cli.extension
+                && !mime_guess::from_path(&file_path)
+                    .first()
+                    .unwrap_or(Mime::from_str("Unknown/Unknown").unwrap())
+                    .to_string()
+                    .starts_with("image")
+            {
+                return;
+            }
+            *total_images.lock().await += 1;
+
+            if let Some(entered_prefix) = cli.name.as_deref() {
+                name = match cli.front {
                     true => {
                         " ".to_owned()
                             + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
+                                .to_owned()
+                    }
+                    false => match cli.suffix {
+                        true => {
+                            " ".to_owned()
+                                + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
+                        }
+                        false => {
+                            sanitize_filename::sanitize(String::from(entered_prefix).trim())
+                                .to_owned()
+                                + " "
+                        }
+                    },
+                }
+            }
+            if cli.keep {
+                image_name = match cli.front {
+                    true => {
+                        " ".to_owned()
+                            + file_name
+                                .strip_suffix(&format!(".{}", file_extension))
+                                .unwrap_or_default()
                     }
                     false => {
-                        sanitize_filename::sanitize(String::from(entered_prefix).trim()).to_owned()
-                            + " "
-                    }
-                },
-            }
-        }
-        if cli.keep {
-            image_name = match cli.front {
-                true => {
-                    " ".to_owned()
-                        + file_name
+                        file_name
                             .strip_suffix(&format!(".{}", file_extension))
                             .unwrap_or_default()
+                            .to_string()
+                            + " "
+                    }
                 }
-                false => {
+            }
+
+            let file_modified_at_system_time = file.metadata().await.unwrap().modified().unwrap();
+            let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
+            let image_modified_at_time = match cli.date {
+                true => file_modified_at_date_time.format("%Y-%m-%d"),
+                false => match cli.twelve {
+                    true => file_modified_at_date_time.format("%Y-%m-%d %I_%M_%S %p"),
+                    false => file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S"),
+                },
+            };
+
+            let image_destination = match cli.suffix {
+                true => match cli.front {
+                    true => PathBuf::from(format!(
+                        "{}/{}{}{}.{}",
+                        renamed_folder.to_str().unwrap_or_default(),
+                        image_modified_at_time,
+                        image_name,
+                        name.trim_end(),
+                        file_extension
+                    )),
+
+                    false => PathBuf::from(format!(
+                        "{}/{}{}{}.{}",
+                        renamed_folder.to_str().unwrap_or_default(),
+                        image_name,
+                        image_modified_at_time,
+                        name.trim_end(),
+                        file_extension
+                    )),
+                },
+                false => match cli.front {
+                    true => PathBuf::from(format!(
+                        "{}/{}{}{}.{}",
+                        renamed_folder.to_str().unwrap_or_default(),
+                        image_modified_at_time,
+                        name,
+                        image_name,
+                        file_extension
+                    )),
+
+                    false => PathBuf::from(format!(
+                        "{}/{}{}{}.{}",
+                        renamed_folder.to_str().unwrap_or_default(),
+                        name,
+                        image_name,
+                        image_modified_at_time,
+                        file_extension
+                    )),
+                },
+            };
+
+            if cli.preview {
+                println!("{:?}", image_destination);
+                return;
+            }
+
+            if Path::new(&image_destination).exists() {
+                eprintln!(
+                    "{}{} {} Skipped",
+                    "Duplicate creation time:".yellow(),
+                    file_modified_at_date_time
+                        .format("%Y/%m/%d %H:%M:%S %z")
+                        .yellow(),
                     file_name
-                        .strip_suffix(&format!(".{}", file_extension))
-                        .unwrap_or_default()
-                        .to_string()
-                        + " "
+                );
+                return;
+            };
+            match fs::copy(file.path(), image_destination).await {
+                Ok(_) => *images_renamed.lock().await += 1,
+                Err(err) => {
+                    eprintln!("{}", err);
+                    if let Err(err) = remove_dir(renamed_folder.as_ref()).await {
+                        eprintln!("Error copying files: {}", err)
+                    };
                 }
             }
-        }
-
-        let file_modified_at_system_time = file.metadata()?.modified()?;
-        let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
-        let image_modified_at_time = match cli.date {
-            true => file_modified_at_date_time.format("%Y-%m-%d"),
-            false => match cli.twelve {
-                true => file_modified_at_date_time.format("%Y-%m-%d %I_%M_%S %p"),
-                false => file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S"),
-            },
-        };
-
-        let image_destination = match cli.suffix {
-            true => match cli.front {
-                true => PathBuf::from(format!(
-                    "{}/{}{}{}.{}",
-                    renamed_folder.to_str().unwrap_or_default(),
-                    image_modified_at_time,
-                    image_name,
-                    name.trim_end(),
-                    file_extension
-                )),
-
-                false => PathBuf::from(format!(
-                    "{}/{}{}{}.{}",
-                    renamed_folder.to_str().unwrap_or_default(),
-                    image_name,
-                    image_modified_at_time,
-                    name.trim_end(),
-                    file_extension
-                )),
-            },
-            false => match cli.front {
-                true => PathBuf::from(format!(
-                    "{}/{}{}{}.{}",
-                    renamed_folder.to_str().unwrap_or_default(),
-                    image_modified_at_time,
-                    name,
-                    image_name,
-                    file_extension
-                )),
-
-                false => PathBuf::from(format!(
-                    "{}/{}{}{}.{}",
-                    renamed_folder.to_str().unwrap_or_default(),
-                    name,
-                    image_name,
-                    image_modified_at_time,
-                    file_extension
-                )),
-            },
-        };
-
-        if cli.preview {
-            println!("{:?}", image_destination);
-            return Ok(());
-        }
-
-        if Path::new(&image_destination).exists() {
-            eprintln!(
-                "{}{} {} Skipped",
-                "Duplicate creation time:".yellow(),
-                file_modified_at_date_time
-                    .format("%Y/%m/%d %H:%M:%S %z")
-                    .yellow(),
-                file_name
-            );
-            continue;
-        };
-        match fs::copy(file.path(), image_destination) {
-            Ok(_) => images_renamed += 1,
-            Err(err) => {
-                eprintln!("{}", err);
-                if let Err(err) = remove_dir(renamed_folder) {
-                    eprintln!("Error copying files: {}", err)
-                };
-                return Err(err.into());
-            }
-        }
+        });
+        tasks.push(task)
     }
 
-    if images_renamed == 0 {
-        if let Err(err) = remove_dir(renamed_folder) {
+    for task in tasks {
+        task.await.unwrap();
+    }
+
+    if *images_renamed.lock().await == 0 {
+        if let Err(err) = remove_dir(renamed_folder.as_ref()).await {
             eprintln!("{err}")
         };
         if cli.extension {
@@ -360,11 +382,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     match cli.all || cli.extension {
         true => Ok(println!(
             "{}/{} files renamed in {:?}",
-            images_renamed, total_images, end_time
+            *images_renamed.lock().await,
+            *total_images.lock().await,
+            end_time
         )),
         false => Ok(println!(
             "{}/{} images renamed in {:?}",
-            images_renamed, total_images, end_time
+            *images_renamed.lock().await,
+            *total_images.lock().await,
+            end_time
         )),
     }
 }
