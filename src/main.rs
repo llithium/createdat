@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use chrono::{DateTime, Local};
@@ -311,6 +311,9 @@ async fn copy_files(
                 println!("{:?}", image_destination);
                 return;
             }
+            const MAX_RETRIES: usize = 3;
+            const RETRY_DELAY_MS: u64 = 100; // milliseconds
+            let mut attempt = 0;
 
             if Path::new(&image_destination).exists() {
                 *duplicate.lock().await += 1;
@@ -358,17 +361,48 @@ async fn copy_files(
                         )),
                     },
                 };
-                match fs::copy(file.path(), image_destination).await {
-                    Ok(_) => *images_renamed.lock().await += 1,
-                    Err(err) => {
-                        eprintln!("{}{}", "Error copying files: ".red(), err.red());
+
+                loop {
+                    let result = fs::copy(file.path(), image_destination.clone()).await;
+                    match result {
+                        Ok(_) => {
+                            *images_renamed.lock().await += 1;
+                            break; // Exit loop on success
+                        }
+                        Err(err) => {
+                            eprintln!("Error copying file: {}. Retrying...", err);
+                            attempt += 1;
+                            if attempt >= MAX_RETRIES {
+                                eprintln!(
+                                    "Max retries exceeded. Skipping file. {}",
+                                    image_destination.to_str().unwrap()
+                                );
+                                break;
+                            }
+                            tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+                        }
                     }
                 }
             } else {
-                match fs::copy(file.path(), image_destination).await {
-                    Ok(_) => *images_renamed.lock().await += 1,
-                    Err(err) => {
-                        eprintln!("{}{}", "Error copying files: ".red(), err.red());
+                loop {
+                    let result = fs::copy(file.path(), image_destination.clone()).await;
+                    match result {
+                        Ok(_) => {
+                            *images_renamed.lock().await += 1;
+                            break;
+                        }
+                        Err(err) => {
+                            eprintln!("Error copying file: {}. Retrying...", err);
+                            attempt += 1;
+                            if attempt >= MAX_RETRIES {
+                                eprintln!(
+                                    "Max retries exceeded. Skipping file. {}",
+                                    image_destination.to_str().unwrap()
+                                );
+                                break;
+                            }
+                            tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+                        }
                     }
                 }
             };
