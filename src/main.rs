@@ -17,7 +17,7 @@ use inquire::{
 use mime_guess::Mime;
 use owo_colors::OwoColorize;
 use tokio::{
-    fs::{self, create_dir_all, read_dir, remove_dir},
+    fs::{self, create_dir_all, read_dir, remove_dir, ReadDir},
     sync::{Mutex, Semaphore},
     task::JoinHandle,
 };
@@ -78,80 +78,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let image_name = String::from("");
     let name = String::from("");
 
-    let mut files = match read_dir(current_dir()?).await {
+    let files = match read_dir(current_dir()?).await {
         Ok(files) => files,
         Err(err) => {
-            eprintln!("Error reading directory: {}", err);
+            eprintln!("{}{}", "Error reading directory: ".red(), err.red());
             return Err(err.into());
         }
     };
-
-    let mut file_extension_options: Vec<String> = vec![];
-
-    if cli.extension {
-        while let Ok(Some(file)) = files.next_entry().await {
-            let file_path = file.path();
-
-            if file.metadata().await.unwrap().is_dir() {
-                continue;
-            }
-
-            let file_name = match file.file_name().into_string() {
-                Ok(name_string) => name_string,
-                Err(_) => {
-                    eprintln!(
-                        "Error converting file name to string {:?}. File skipped",
-                        file_path
-                    );
-                    continue;
-                }
-            };
-
-            let file_extension = match file_name.starts_with('.') {
-                true => match file_name.strip_prefix('.') {
-                    Some(extension) => extension,
-                    None => {
-                        eprintln!(
-                            "Error getting file extension from {}. File skipped",
-                            file_name
-                        );
-                        continue;
-                    }
-                },
-                false => Path::new(&file_path)
-                    .extension()
-                    .and_then(OsStr::to_str)
-                    .unwrap_or_default(),
-            };
-            match file_extension_options.contains(&file_extension.to_owned()) {
-                true => continue,
-                false => file_extension_options.push(String::from(file_extension)),
-            }
-        }
-    }
-
     let extension_selections = match cli.extension {
-        true => {
-            let ans =
-                MultiSelect::new("Select file types to rename:", file_extension_options).prompt();
-
-            match ans {
-                Ok(selections) => selections,
-                Err(err) => return Err(err.into()),
-            }
-        }
-        false => vec![String::from("")],
+        true => match get_extensions(files).await {
+            Ok(selections) => selections,
+            Err(_) => vec![],
+        },
+        false => vec![],
     };
 
     let start_time = SystemTime::now();
-
-    let mut files = match read_dir(current_dir()?).await {
-        Ok(files) => files,
-        Err(err) => {
-            eprintln!("Error reading directory: {}", err);
-            return Err(err.into());
-        }
-    };
 
     if !cli.preview {
         if renamed_folder.exists() {
@@ -171,17 +113,57 @@ async fn main() -> Result<(), Box<dyn Error>> {
             return Err(err.into());
         }
     }
+    let renamed_folder = Arc::new(renamed_folder);
+    let cli_clone = Arc::clone(&cli);
+    let renamed_folder_clone = Arc::clone(&renamed_folder);
+
+    let (images_renamed, total_images) = copy_files(
+        cli_clone,
+        renamed_folder_clone,
+        extension_selections,
+        name,
+        image_name,
+    )
+    .await
+    .unwrap();
+    let renamed_folder = Arc::clone(&renamed_folder);
+    let cli = Arc::clone(&cli);
+
+    print_summary(
+        start_time,
+        images_renamed,
+        total_images,
+        renamed_folder,
+        cli,
+    )
+    .await
+}
+
+async fn copy_files(
+    cli: Arc<Cli>,
+    renamed_folder: Arc<PathBuf>,
+    extension_selections: Vec<String>,
+    name: String,
+    image_name: String,
+) -> Result<(u32, u32), Box<dyn Error>> {
+    let mut files = match read_dir(current_dir()?).await {
+        Ok(files) => files,
+        Err(err) => {
+            eprintln!("{}{}", "Error reading directory: ".red(), err.red());
+            return Err(err.into());
+        }
+    };
 
     let total_images: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
     let images_renamed: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
-    let renamed_folder = Arc::new(renamed_folder);
-    let cli = Arc::clone(&cli);
+    let duplicate: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
     let mut tasks: Vec<JoinHandle<()>> = vec![];
 
     while let Ok(Some(file)) = files.next_entry().await {
         let total_images = Arc::clone(&total_images);
         let images_renamed = Arc::clone(&images_renamed);
         let renamed_folder = Arc::clone(&renamed_folder);
+        let duplicate = Arc::clone(&duplicate);
         let cli = Arc::clone(&cli);
         let extension_selections = extension_selections.clone();
         let mut name = name.clone();
@@ -331,34 +313,86 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             if Path::new(&image_destination).exists() {
-                eprintln!(
-                    "{}{} {} Skipped",
-                    "Duplicate creation time:".yellow(),
-                    file_modified_at_date_time
-                        .format("%Y/%m/%d %H:%M:%S %z")
-                        .yellow(),
-                    file_name
-                );
-                return;
-            };
-            match fs::copy(file.path(), image_destination).await {
-                Ok(_) => *images_renamed.lock().await += 1,
-                Err(err) => {
-                    eprintln!("{}", err);
-                    if let Err(err) = remove_dir(renamed_folder.as_ref()).await {
-                        eprintln!("Error copying files: {}", err)
-                    };
+                *duplicate.lock().await += 1;
+                let image_destination = match cli.suffix {
+                    true => match cli.front {
+                        true => PathBuf::from(format!(
+                            "{}/{}{}{} [{}].{}",
+                            renamed_folder.to_str().unwrap_or_default(),
+                            image_modified_at_time,
+                            image_name,
+                            name.trim_end(),
+                            duplicate.lock().await,
+                            file_extension
+                        )),
+
+                        false => PathBuf::from(format!(
+                            "{}/{}{}{} [{}].{}",
+                            renamed_folder.to_str().unwrap_or_default(),
+                            image_name,
+                            image_modified_at_time,
+                            name.trim_end(),
+                            duplicate.lock().await,
+                            file_extension
+                        )),
+                    },
+                    false => match cli.front {
+                        true => PathBuf::from(format!(
+                            "{}/{}{}{} [{}].{}",
+                            renamed_folder.to_str().unwrap_or_default(),
+                            image_modified_at_time,
+                            name,
+                            image_name,
+                            duplicate.lock().await,
+                            file_extension
+                        )),
+
+                        false => PathBuf::from(format!(
+                            "{}/{}{}{} [{}].{}",
+                            renamed_folder.to_str().unwrap_or_default(),
+                            name,
+                            image_name,
+                            image_modified_at_time,
+                            duplicate.lock().await,
+                            file_extension
+                        )),
+                    },
+                };
+                match fs::copy(file.path(), image_destination).await {
+                    Ok(_) => *images_renamed.lock().await += 1,
+                    Err(err) => {
+                        eprintln!("{}{}", "Error copying files: ".red(), err.red());
+                    }
                 }
-            }
+            } else {
+                match fs::copy(file.path(), image_destination).await {
+                    Ok(_) => *images_renamed.lock().await += 1,
+                    Err(err) => {
+                        eprintln!("{}{}", "Error copying files: ".red(), err.red());
+                    }
+                }
+            };
         });
         tasks.push(task)
     }
-
     for task in tasks {
         task.await.unwrap();
     }
 
-    if *images_renamed.lock().await == 0 {
+    let result = (*images_renamed.lock().await, *total_images.lock().await);
+    Ok(result)
+}
+
+async fn print_summary(
+    start_time: SystemTime,
+    images_renamed: u32,
+    total_images: u32,
+    renamed_folder: Arc<PathBuf>,
+    cli: Arc<Cli>,
+) -> Result<(), Box<dyn Error>> {
+    let renamed_folder = Arc::clone(&renamed_folder);
+    let cli = Arc::clone(&cli);
+    if images_renamed == 0 {
         if let Err(err) = remove_dir(renamed_folder.as_ref()).await {
             eprintln!("{err}")
         };
@@ -382,16 +416,60 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match cli.all || cli.extension {
         true => Ok(println!(
             "{}/{} files renamed in {:?}",
-            *images_renamed.lock().await,
-            *total_images.lock().await,
-            end_time
+            images_renamed, total_images, end_time
         )),
         false => Ok(println!(
             "{}/{} images renamed in {:?}",
-            *images_renamed.lock().await,
-            *total_images.lock().await,
-            end_time
+            images_renamed, total_images, end_time
         )),
+    }
+}
+
+async fn get_extensions(mut files: ReadDir) -> Result<Vec<String>, inquire::InquireError> {
+    let mut file_extension_options: Vec<String> = vec![];
+    while let Ok(Some(file)) = files.next_entry().await {
+        let file_path = file.path();
+
+        if file.metadata().await.unwrap().is_dir() {
+            continue;
+        }
+
+        let file_name = match file.file_name().into_string() {
+            Ok(name_string) => name_string,
+            Err(_) => {
+                eprintln!(
+                    "Error converting file name to string {:?}. File skipped",
+                    file_path
+                );
+                continue;
+            }
+        };
+
+        let file_extension = match file_name.starts_with('.') {
+            true => match file_name.strip_prefix('.') {
+                Some(extension) => extension,
+                None => {
+                    eprintln!(
+                        "Error getting file extension from {}. File skipped",
+                        file_name
+                    );
+                    continue;
+                }
+            },
+            false => Path::new(&file_path)
+                .extension()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default(),
+        };
+        match file_extension_options.contains(&file_extension.to_owned()) {
+            true => continue,
+            false => file_extension_options.push(String::from(file_extension)),
+        }
+    }
+
+    match MultiSelect::new("Select file types to rename:", file_extension_options).prompt() {
+        Ok(selections) => Ok(selections),
+        Err(err) => Err(err),
     }
 }
 
