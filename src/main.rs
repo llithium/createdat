@@ -70,13 +70,14 @@ struct Cli {
 async fn main() -> Result<(), Box<dyn Error>> {
     inquire::set_global_render_config(get_render_config());
     let cli = Arc::new(Cli::parse());
-    let renamed_folder: PathBuf = match cli.folder.as_deref() {
-        Some(name) => PathBuf::from(sanitize_filename::sanitize(name.trim())),
-        None => PathBuf::from("renamed"),
+    let renamed_folder: PathBuf = if let Some(name) = cli.folder.as_deref() {
+        PathBuf::from(sanitize_filename::sanitize(name.trim()))
+    } else {
+        PathBuf::from("renamed")
     };
 
-    let image_name = String::from("");
-    let name = String::from("");
+    let image_name = String::new();
+    let name = String::new();
 
     let files = match read_dir(current_dir()?).await {
         Ok(files) => files,
@@ -85,27 +86,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
             return Err(err.into());
         }
     };
-    let extension_selections = match cli.extension {
-        true => match get_extensions(files).await {
-            Ok(selections) => selections,
-            Err(_) => vec![],
-        },
-        false => vec![],
+    let extension_selections = if cli.extension {
+        if let Ok(selections) = get_extensions(files).await {
+            selections
+        } else {
+            vec![]
+        }
+    } else {
+        vec![]
     };
 
     let start_time = SystemTime::now();
 
     if !cli.preview {
-        if renamed_folder.exists() {
-            match renamed_folder.read_dir()?.next().is_none() {
-                true => (),
-                false => {
-                    eprintln!(
-                        "Folder {} already exists",
-                        renamed_folder.to_str().unwrap_or_default()
-                    );
-                    return Ok(());
-                }
+        if renamed_folder.exists() && renamed_folder.read_dir()?.next().is_some() {
+            {
+                eprintln!(
+                    "Folder {} already exists",
+                    renamed_folder.to_str().unwrap_or_default()
+                );
+                return Ok(());
             }
         }
         if let Err(err) = create_dir_all(renamed_folder.clone()).await {
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         "-k".yellow(),
                         "--keep".yellow()
                     );
-                    remove_dir_all(renamed_folder.as_ref()).await.unwrap();
+                    remove_dir_all(renamed_folder.as_ref()).await?;
                     return Ok(());
                 }
                 1 => {
@@ -151,7 +151,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         "-k".yellow(),
                         "--keep".yellow()
                     );
-                    remove_dir_all(renamed_folder.as_ref()).await.unwrap();
+                    remove_dir_all(renamed_folder.as_ref()).await?;
                     return Ok(());
                 }
                 _ => return Ok(()),
@@ -209,23 +209,21 @@ async fn copy_files(
                 return;
             }
 
-            let file_name = match file.file_name().into_string() {
-                Ok(name_string) => name_string,
-                Err(_) => {
-                    eprintln!(
-                        "{}{:?}{}",
-                        "Error converting file name to string ".red(),
-                        file_path.red(),
-                        ". File skipped".red()
-                    );
-                    return;
-                }
+            let Ok(file_name) = file.file_name().into_string() else {
+                eprintln!(
+                    "{}{:?}{}",
+                    "Error converting file name to string ".red(),
+                    file_path.red(),
+                    ". File skipped".red()
+                );
+                return;
             };
 
-            let file_extension = match file_name.starts_with('.') {
-                true => match file_name.strip_prefix('.') {
-                    Some(extension) => extension,
-                    None => {
+            let file_extension = if file_name.starts_with('.') {
+                if let Some(extension) = file_name.strip_prefix('.') {
+                    extension
+                } else {
+                    {
                         eprintln!(
                             "{}{}{}",
                             "Error getting file extension from ".red(),
@@ -234,11 +232,12 @@ async fn copy_files(
                         );
                         return;
                     }
-                },
-                false => Path::new(&file_path)
+                }
+            } else {
+                Path::new(&file_path)
                     .extension()
                     .and_then(OsStr::to_str)
-                    .unwrap_or_default(),
+                    .unwrap_or_default()
             };
             if cli.extension && !extension_selections.contains(&file_extension.to_owned()) {
                 return;
@@ -256,96 +255,83 @@ async fn copy_files(
             *total_images.lock().await += 1;
 
             if let Some(entered_prefix) = cli.name.as_deref() {
-                name = match cli.front {
-                    true => {
-                        " ".to_owned()
-                            + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
-                                .to_owned()
-                    }
-                    false => match cli.suffix {
-                        true => {
-                            " ".to_owned()
-                                + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
-                        }
-                        false => {
-                            sanitize_filename::sanitize(String::from(entered_prefix).trim())
-                                .to_owned()
-                                + " "
-                        }
-                    },
+                name = if cli.front {
+                    " ".to_owned()
+                        + &sanitize_filename::sanitize(String::from(entered_prefix).trim()).clone()
+                } else if cli.suffix {
+                    " ".to_owned()
+                        + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
+                } else {
+                    sanitize_filename::sanitize(String::from(entered_prefix).trim()).clone() + " "
                 }
             }
             if cli.keep {
-                image_name = match cli.front {
-                    true => {
-                        " ".to_owned()
-                            + file_name
-                                .strip_suffix(&format!(".{}", file_extension))
-                                .unwrap_or_default()
-                    }
-                    false => {
-                        file_name
-                            .strip_suffix(&format!(".{}", file_extension))
+                image_name = if cli.front {
+                    " ".to_owned()
+                        + file_name
+                            .strip_suffix(&format!(".{file_extension}"))
                             .unwrap_or_default()
-                            .to_string()
-                            + " "
-                    }
+                } else {
+                    file_name
+                        .strip_suffix(&format!(".{file_extension}"))
+                        .unwrap_or_default()
+                        .to_string()
+                        + " "
                 }
             }
 
             let file_modified_at_system_time = file.metadata().await.unwrap().modified().unwrap();
             let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
-            let image_modified_at_time = match cli.date {
-                true => file_modified_at_date_time.format("%Y-%m-%d"),
-                false => match cli.twelve {
-                    true => file_modified_at_date_time.format("%Y-%m-%d %I_%M_%S %p"),
-                    false => file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S"),
-                },
+            let image_modified_at_time = if cli.date {
+                file_modified_at_date_time.format("%Y-%m-%d")
+            } else if cli.twelve {
+                file_modified_at_date_time.format("%Y-%m-%d %I_%M_%S %p")
+            } else {
+                file_modified_at_date_time.format("%Y-%m-%d %H_%M_%S")
             };
 
-            let image_destination = match cli.suffix {
-                true => match cli.front {
-                    true => PathBuf::from(format!(
+            let image_destination = if cli.suffix {
+                if cli.front {
+                    PathBuf::from(format!(
                         "{}/{}{}{}.{}",
                         renamed_folder.to_str().unwrap_or_default(),
                         image_modified_at_time,
                         image_name,
                         name.trim_end(),
                         file_extension
-                    )),
-
-                    false => PathBuf::from(format!(
+                    ))
+                } else {
+                    PathBuf::from(format!(
                         "{}/{}{}{}.{}",
                         renamed_folder.to_str().unwrap_or_default(),
                         image_name,
                         image_modified_at_time,
                         name.trim_end(),
                         file_extension
-                    )),
-                },
-                false => match cli.front {
-                    true => PathBuf::from(format!(
-                        "{}/{}{}{}.{}",
-                        renamed_folder.to_str().unwrap_or_default(),
-                        image_modified_at_time,
-                        name,
-                        image_name,
-                        file_extension
-                    )),
-
-                    false => PathBuf::from(format!(
-                        "{}/{}{}{}.{}",
-                        renamed_folder.to_str().unwrap_or_default(),
-                        name,
-                        image_name,
-                        image_modified_at_time,
-                        file_extension
-                    )),
-                },
+                    ))
+                }
+            } else if cli.front {
+                PathBuf::from(format!(
+                    "{}/{}{}{}.{}",
+                    renamed_folder.to_str().unwrap_or_default(),
+                    image_modified_at_time,
+                    name,
+                    image_name,
+                    file_extension
+                ))
+            } else {
+                PathBuf::from(format!(
+                    "{}/{}{}{}.{}",
+                    renamed_folder.to_str().unwrap_or_default(),
+                    name,
+                    image_name,
+                    image_modified_at_time,
+                    file_extension
+                ))
             };
 
             if cli.preview {
-                println!("{:?}", image_destination);
+                println!("{image_destination:?}");
                 return;
             }
 
@@ -357,37 +343,34 @@ async fn copy_files(
                 return;
             }
 
-            const MAX_RETRIES: usize = 3;
-            const RETRY_DELAY_MS: u64 = 100;
-            let mut attempt = 0;
+            let max_retries: u8 = 3;
+            let retry_delay_ms: u64 = 100;
+            let mut attempt: u8 = 0;
 
             loop {
-                let result = fs::copy(file.path(), image_destination.clone()).await;
-                match result {
-                    Ok(_) => {
-                        *images_renamed.lock().await += 1;
+                let copy_result = fs::copy(file.path(), image_destination.clone()).await;
+                if copy_result.is_ok() {
+                    *images_renamed.lock().await += 1;
+                    break;
+                } else {
+                    // eprintln!("{}{}. Retrying...", "Error copying file: ".yellow(), err);
+                    attempt += 1;
+                    if attempt >= max_retries {
+                        eprintln!(
+                            "{}{}",
+                            "Max retries reached. Skipping file: ".red(),
+                            file_name.red()
+                        );
                         break;
                     }
-                    Err(_) => {
-                        // eprintln!("{}{}. Retrying...", "Error copying file: ".yellow(), err);
-                        attempt += 1;
-                        if attempt >= MAX_RETRIES {
-                            eprintln!(
-                                "{}{}",
-                                "Max retries reached. Skipping file: ".red(),
-                                file_name.red()
-                            );
-                            break;
-                        }
-                        tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-                    }
+                    tokio::time::sleep(Duration::from_millis(retry_delay_ms)).await;
                 }
             }
         });
-        tasks.push(task)
+        tasks.push(task);
     }
     for task in tasks {
-        task.await.unwrap();
+        task.await?;
     }
 
     let result = (
@@ -408,37 +391,37 @@ async fn print_summary(
     let renamed_folder = Arc::clone(&renamed_folder);
     let cli = Arc::clone(&cli);
     if images_renamed == 0 {
-        if let Err(err) = remove_dir(renamed_folder.as_ref()).await {
-            eprintln!("{err}")
-        };
+        remove_dir(renamed_folder.as_ref()).await?;
         if cli.extension {
             eprintln!("No files selected");
             return Ok(());
         }
-        match cli.all {
-            true => eprintln!("No files found"),
-            false => {
-                eprintln!(
-                    "No images or wrong image formats. (Use '{}' or '{}' to rename any files found)","-a".yellow(),"--all".yellow()
-                )
-            }
+        if cli.all {
+            eprintln!("No files found");
+        } else {
+            eprintln!(
+                "No images or wrong image formats. (Use '{}' or '{}' to rename any files found)",
+                "-a".yellow(),
+                "--all".yellow()
+            );
         }
         return Ok(());
     }
 
     let end_time = start_time.elapsed().unwrap_or_else(|err| {
-        eprintln!("Error calculating time{}", err);
+        eprintln!("Error calculating time{err}");
         std::time::Duration::default()
     });
-    match cli.all || cli.extension {
-        true => Ok(println!(
+    if cli.all || cli.extension {
+        Ok(println!(
             "{}/{} Files renamed in {:?}",
             images_renamed, total_images, end_time
-        )),
-        false => Ok(println!(
+        ))
+    } else {
+        Ok(println!(
             "{}/{} Images renamed in {:?}",
             images_renamed, total_images, end_time
-        )),
+        ))
     }
 }
 
@@ -447,40 +430,38 @@ async fn get_extensions(mut files: ReadDir) -> Result<Vec<String>, inquire::Inqu
     while let Ok(Some(file)) = files.next_entry().await {
         let file_path = file.path();
 
-        if file.metadata().await.unwrap().is_dir() {
+        if file.metadata().await?.is_dir() {
             continue;
         }
 
-        let file_name = match file.file_name().into_string() {
-            Ok(name_string) => name_string,
-            Err(_) => {
+        let Ok(file_name) = file.file_name().into_string() else {
+            eprintln!(
+                "Error converting file name to string {:?}. File skipped",
+                file_path
+            );
+            continue;
+        };
+
+        let file_extension = if file_name.starts_with('.') {
+            if let Some(extension) = file_name.strip_prefix('.') {
+                extension
+            } else {
                 eprintln!(
-                    "Error converting file name to string {:?}. File skipped",
-                    file_path
+                    "Error getting file extension from {}. File skipped",
+                    file_name
                 );
                 continue;
             }
-        };
-
-        let file_extension = match file_name.starts_with('.') {
-            true => match file_name.strip_prefix('.') {
-                Some(extension) => extension,
-                None => {
-                    eprintln!(
-                        "Error getting file extension from {}. File skipped",
-                        file_name
-                    );
-                    continue;
-                }
-            },
-            false => Path::new(&file_path)
+        } else {
+            Path::new(&file_path)
                 .extension()
                 .and_then(OsStr::to_str)
-                .unwrap_or_default(),
+                .unwrap_or_default()
         };
-        match file_extension_options.contains(&file_extension.to_owned()) {
-            true => continue,
-            false => file_extension_options.push(String::from(file_extension)),
+        if file_extension_options.contains(&file_extension.to_owned()) {
+            continue;
+        } else {
+            file_extension_options.push(String::from(file_extension));
         }
     }
 
