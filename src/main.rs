@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         if let Err(err) = create_dir_all(renamed_folder.clone()).await {
-            eprintln!("Error creating directory: {}", err);
+            eprintln!("{}{}", "Error creating directory: ".red(), err.red());
             return Err(err.into());
         }
     }
@@ -180,8 +180,10 @@ async fn copy_files(
                 Ok(name_string) => name_string,
                 Err(_) => {
                     eprintln!(
-                        "Error converting file name to string {:?}. File skipped",
-                        file_path
+                        "{}{:?}{}",
+                        "Error converting file name to string ".red(),
+                        file_path.red(),
+                        ". File skipped".red()
                     );
                     return;
                 }
@@ -192,8 +194,10 @@ async fn copy_files(
                     Some(extension) => extension,
                     None => {
                         eprintln!(
-                            "Error getting file extension from {}. File skipped",
-                            file_name
+                            "{}{}{}",
+                            "Error getting file extension from ".red(),
+                            file_name.red(),
+                            ". File skipped".red()
                         );
                         return;
                     }
@@ -312,7 +316,7 @@ async fn copy_files(
                 return;
             }
             const MAX_RETRIES: usize = 3;
-            const RETRY_DELAY_MS: u64 = 100; // milliseconds
+            const RETRY_DELAY_MS: u64 = 100;
             let mut attempt = 0;
 
             if Path::new(&image_destination).exists() {
@@ -367,15 +371,16 @@ async fn copy_files(
                     match result {
                         Ok(_) => {
                             *images_renamed.lock().await += 1;
-                            break; // Exit loop on success
+                            break;
                         }
-                        Err(err) => {
-                            eprintln!("Error copying file: {}. Retrying...", err);
+                        Err(_) => {
+                            // eprintln!("{}{}. Retrying...", "Error copying file: ".yellow(), err);
                             attempt += 1;
                             if attempt >= MAX_RETRIES {
                                 eprintln!(
-                                    "Max retries exceeded. Skipping file. {}",
-                                    image_destination.to_str().unwrap()
+                                    "{}{}",
+                                    "Max retries reached. Skipping file: ".red(),
+                                    file_name.red()
                                 );
                                 break;
                             }
@@ -391,13 +396,14 @@ async fn copy_files(
                             *images_renamed.lock().await += 1;
                             break;
                         }
-                        Err(err) => {
-                            eprintln!("Error copying file: {}. Retrying...", err);
+                        Err(_) => {
+                            // eprintln!("{}{}. Retrying...", "Error copying file: ".yellow(), err);
                             attempt += 1;
                             if attempt >= MAX_RETRIES {
                                 eprintln!(
-                                    "Max retries exceeded. Skipping file. {}",
-                                    image_destination.to_str().unwrap()
+                                    "{}{}",
+                                    "Max retries reached. Skipping file:     ".red(),
+                                    file_name.red()
                                 );
                                 break;
                             }
@@ -412,7 +418,24 @@ async fn copy_files(
     for task in tasks {
         task.await.unwrap();
     }
-
+    match *duplicate.lock().await {
+        count if count > 1 => {
+            eprintln!(
+                "{} {}",
+                count.yellow(),
+                "Duplicate creation times found. (Use -k or --keep to include original unique names)"
+                    .yellow(),
+            );
+        }
+        1 => {
+            eprintln!(
+                "{}",
+                "Duplicate creation time found. (Use -k or --keep to include original unique names)"
+                    .yellow(),
+            );
+        }
+        _ => (),
+    }
     let result = (*images_renamed.lock().await, *total_images.lock().await);
     Ok(result)
 }
@@ -437,7 +460,9 @@ async fn print_summary(
         match cli.all {
             true => eprintln!("No files found"),
             false => {
-                eprintln!("No images or wrong image formats. (Use --all to rename any files found)")
+                eprintln!(
+                    "No images or wrong image formats. (Use --a or -all to rename any files found)"
+                )
             }
         }
         return Ok(());
@@ -449,11 +474,11 @@ async fn print_summary(
     });
     match cli.all || cli.extension {
         true => Ok(println!(
-            "{}/{} files renamed in {:?}",
+            "{}/{} Files renamed in {:?}",
             images_renamed, total_images, end_time
         )),
         false => Ok(println!(
-            "{}/{} images renamed in {:?}",
+            "{}/{} Images renamed in {:?}",
             images_renamed, total_images, end_time
         )),
     }
