@@ -17,7 +17,7 @@ use inquire::{
 use mime_guess::Mime;
 use owo_colors::OwoColorize;
 use tokio::{
-    fs::{self, create_dir_all, read_dir, remove_dir, ReadDir},
+    fs::{self, create_dir_all, read_dir, remove_dir, remove_dir_all, ReadDir},
     sync::{Mutex, Semaphore},
     task::JoinHandle,
 };
@@ -116,16 +116,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let renamed_folder = Arc::new(renamed_folder);
     let cli_clone = Arc::clone(&cli);
     let renamed_folder_clone = Arc::clone(&renamed_folder);
+    let duplicate: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
 
-    let (images_renamed, total_images) = copy_files(
+    let (images_renamed, total_images, _duplicate) = match copy_files(
         cli_clone,
         renamed_folder_clone,
         extension_selections,
         name,
         image_name,
+        duplicate,
     )
     .await
-    .unwrap();
+    {
+        Ok(result) => match result.2 {
+            0 => result,
+            count if count > 1 => {
+                eprintln!(
+                    "{}Duplicate creation times found. (Use '{}' or '{}' to include original unique names)",
+                    "Error: ".red(),
+                    "-k".yellow(),
+                    "--keep".yellow()
+                );
+                remove_dir_all(renamed_folder.as_ref()).await.unwrap();
+                return Ok(());
+            }
+            1 => {
+                eprintln!(
+                    "{}Duplicate creation time found. (Use '{}' or '{}' to include original unique names)",
+                    "Error".red(),
+                    "-k".yellow(),
+                    "--keep".yellow()
+                );
+                remove_dir_all(renamed_folder.as_ref()).await.unwrap();
+                return Ok(());
+            }
+            _ => return Ok(()),
+        },
+        Err(err) => return Err(err),
+    };
     let renamed_folder = Arc::clone(&renamed_folder);
     let cli = Arc::clone(&cli);
 
@@ -145,7 +173,8 @@ async fn copy_files(
     extension_selections: Vec<String>,
     name: String,
     image_name: String,
-) -> Result<(u32, u32), Box<dyn Error>> {
+    duplicate: Arc<Mutex<u32>>,
+) -> Result<(u32, u32, u32), Box<dyn Error>> {
     let mut files = match read_dir(current_dir()?).await {
         Ok(files) => files,
         Err(err) => {
@@ -156,7 +185,6 @@ async fn copy_files(
 
     let total_images: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
     let images_renamed: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
-    let duplicate: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
     let mut tasks: Vec<JoinHandle<()>> = vec![];
 
     while let Ok(Some(file)) = files.next_entry().await {
@@ -315,128 +343,53 @@ async fn copy_files(
                 println!("{:?}", image_destination);
                 return;
             }
+
+            if Path::new(&image_destination).exists() {
+                *duplicate.lock().await += 1;
+                return;
+            }
+            if *duplicate.lock().await > 0 {
+                return;
+            }
+
             const MAX_RETRIES: usize = 3;
             const RETRY_DELAY_MS: u64 = 100;
             let mut attempt = 0;
 
-            if Path::new(&image_destination).exists() {
-                *duplicate.lock().await += 1;
-                let image_destination = match cli.suffix {
-                    true => match cli.front {
-                        true => PathBuf::from(format!(
-                            "{}/{}{}{} [{}].{}",
-                            renamed_folder.to_str().unwrap_or_default(),
-                            image_modified_at_time,
-                            image_name,
-                            name.trim_end(),
-                            duplicate.lock().await,
-                            file_extension
-                        )),
-
-                        false => PathBuf::from(format!(
-                            "{}/{}{}{} [{}].{}",
-                            renamed_folder.to_str().unwrap_or_default(),
-                            image_name,
-                            image_modified_at_time,
-                            name.trim_end(),
-                            duplicate.lock().await,
-                            file_extension
-                        )),
-                    },
-                    false => match cli.front {
-                        true => PathBuf::from(format!(
-                            "{}/{}{}{} [{}].{}",
-                            renamed_folder.to_str().unwrap_or_default(),
-                            image_modified_at_time,
-                            name,
-                            image_name,
-                            duplicate.lock().await,
-                            file_extension
-                        )),
-
-                        false => PathBuf::from(format!(
-                            "{}/{}{}{} [{}].{}",
-                            renamed_folder.to_str().unwrap_or_default(),
-                            name,
-                            image_name,
-                            image_modified_at_time,
-                            duplicate.lock().await,
-                            file_extension
-                        )),
-                    },
-                };
-
-                loop {
-                    let result = fs::copy(file.path(), image_destination.clone()).await;
-                    match result {
-                        Ok(_) => {
-                            *images_renamed.lock().await += 1;
+            loop {
+                let result = fs::copy(file.path(), image_destination.clone()).await;
+                match result {
+                    Ok(_) => {
+                        *images_renamed.lock().await += 1;
+                        break;
+                    }
+                    Err(_) => {
+                        // eprintln!("{}{}. Retrying...", "Error copying file: ".yellow(), err);
+                        attempt += 1;
+                        if attempt >= MAX_RETRIES {
+                            eprintln!(
+                                "{}{}",
+                                "Max retries reached. Skipping file: ".red(),
+                                file_name.red()
+                            );
                             break;
                         }
-                        Err(_) => {
-                            // eprintln!("{}{}. Retrying...", "Error copying file: ".yellow(), err);
-                            attempt += 1;
-                            if attempt >= MAX_RETRIES {
-                                eprintln!(
-                                    "{}{}",
-                                    "Max retries reached. Skipping file: ".red(),
-                                    file_name.red()
-                                );
-                                break;
-                            }
-                            tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-                        }
+                        tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
                     }
                 }
-            } else {
-                loop {
-                    let result = fs::copy(file.path(), image_destination.clone()).await;
-                    match result {
-                        Ok(_) => {
-                            *images_renamed.lock().await += 1;
-                            break;
-                        }
-                        Err(_) => {
-                            // eprintln!("{}{}. Retrying...", "Error copying file: ".yellow(), err);
-                            attempt += 1;
-                            if attempt >= MAX_RETRIES {
-                                eprintln!(
-                                    "{}{}",
-                                    "Max retries reached. Skipping file:     ".red(),
-                                    file_name.red()
-                                );
-                                break;
-                            }
-                            tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-                        }
-                    }
-                }
-            };
+            }
         });
         tasks.push(task)
     }
     for task in tasks {
         task.await.unwrap();
     }
-    match *duplicate.lock().await {
-        count if count > 1 => {
-            eprintln!(
-                "{} {}",
-                count.yellow(),
-                "Duplicate creation times found. (Use -k or --keep to include original unique names)"
-                    .yellow(),
-            );
-        }
-        1 => {
-            eprintln!(
-                "{}",
-                "Duplicate creation time found. (Use -k or --keep to include original unique names)"
-                    .yellow(),
-            );
-        }
-        _ => (),
-    }
-    let result = (*images_renamed.lock().await, *total_images.lock().await);
+
+    let result = (
+        *images_renamed.lock().await,
+        *total_images.lock().await,
+        *duplicate.lock().await,
+    );
     Ok(result)
 }
 
@@ -461,7 +414,7 @@ async fn print_summary(
             true => eprintln!("No files found"),
             false => {
                 eprintln!(
-                    "No images or wrong image formats. (Use --a or -all to rename any files found)"
+                    "No images or wrong image formats. (Use '{}' or '{}' to rename any files found)","-a".yellow(),"--all".yellow()
                 )
             }
         }
