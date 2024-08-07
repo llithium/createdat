@@ -128,30 +128,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .await
     {
-        Ok(result) => match result.2 {
-            0 => result,
-            count if count > 1 => {
-                eprintln!(
-                    "{}Duplicate creation times found. (Use '{}' or '{}' to include original unique names)",
-                    "Error: ".red(),
-                    "-k".yellow(),
-                    "--keep".yellow()
-                );
-                remove_dir_all(renamed_folder.as_ref()).await.unwrap();
+        Ok(result) => {
+            if cli.preview {
                 return Ok(());
             }
-            1 => {
-                eprintln!(
-                    "{}Duplicate creation time found. (Use '{}' or '{}' to include original unique names)",
-                    "Error".red(),
-                    "-k".yellow(),
-                    "--keep".yellow()
-                );
-                remove_dir_all(renamed_folder.as_ref()).await.unwrap();
-                return Ok(());
+            match result.2 {
+                0 => result,
+                count if count > 1 => {
+                    eprintln!(
+                        "{} Duplicate creation times found. (Use '{}' or '{}' to include original unique names)",
+                        "Error:".red(),
+                        "-k".yellow(),
+                        "--keep".yellow()
+                    );
+                    remove_dir_all(renamed_folder.as_ref()).await.unwrap();
+                    return Ok(());
+                }
+                1 => {
+                    eprintln!(
+                        "{} Duplicate creation time found. (Use '{}' or '{}' to include original unique names)",
+                        "Error:".red(),
+                        "-k".yellow(),
+                        "--keep".yellow()
+                    );
+                    remove_dir_all(renamed_folder.as_ref()).await.unwrap();
+                    return Ok(());
+                }
+                _ => return Ok(()),
             }
-            _ => return Ok(()),
-        },
+        }
         Err(err) => return Err(err),
     };
     let renamed_folder = Arc::clone(&renamed_folder);
