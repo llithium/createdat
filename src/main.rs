@@ -219,8 +219,10 @@ async fn copy_files(
                 return;
             };
 
+            let mut dotfile = false;
             let file_extension = if file_name.starts_with('.') {
                 if let Some(extension) = file_name.strip_prefix('.') {
+                    dotfile = true;
                     extension
                 } else {
                     {
@@ -271,6 +273,11 @@ async fn copy_files(
                         + file_name
                             .strip_suffix(&format!(".{file_extension}"))
                             .unwrap_or_default()
+                } else if dotfile {
+                    file_name
+                        .strip_suffix(&format!(".{file_extension}"))
+                        .unwrap_or_default()
+                        .to_string()
                 } else {
                     file_name
                         .strip_suffix(&format!(".{file_extension}"))
