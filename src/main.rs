@@ -84,7 +84,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let files = match read_dir(current_dir()?).await {
         Ok(files) => files,
         Err(err) => {
-            eprintln!("{}{}", "Error reading directory: ".red(), err.red());
+            eprintln!(
+                "{} {}",
+                " ERROR READING DIRECTORY ".black().on_red(),
+                err.on_red()
+            );
             return Err(err.into());
         }
     };
@@ -111,7 +115,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         if let Err(err) = create_dir_all(renamed_folder.clone()).await {
-            eprintln!("{}{}", "Error creating directory: ".red(), err.red());
+            eprintln!(
+                "{} {}",
+                " ERROR CREATING DIRECTORY ".black().on_red(),
+                err.red()
+            );
             return Err(err.into());
         }
     }
@@ -139,7 +147,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 count if count > 1 => {
                     eprintln!(
                         "{} Duplicate creation times found. (Use '{}' or '{}' to include original unique names)",
-                        "Error:".red(),
+                        " ERROR ".black().on_red(),
                         "-k".yellow(),
                         "--keep".yellow()
                     );
@@ -149,7 +157,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 1 => {
                     eprintln!(
                         "{} Duplicate creation time found. (Use '{}' or '{}' to include original unique names)",
-                        "Error:".red(),
+                        " ERROR ".black().on_red(),
                         "-k".yellow(),
                         "--keep".yellow()
                     );
@@ -185,7 +193,11 @@ async fn copy_files(
     let mut files = match read_dir(current_dir()?).await {
         Ok(files) => files,
         Err(err) => {
-            eprintln!("{}{}", "Error reading directory: ".red(), err.red());
+            eprintln!(
+                "{} {}",
+                " ERROR READING DIRECTORY ".black().on_red(),
+                err.red()
+            );
             return Err(err.into());
         }
     };
@@ -213,10 +225,10 @@ async fn copy_files(
 
             let Ok(file_name) = file.file_name().into_string() else {
                 eprintln!(
-                    "{}{:?}{}",
-                    "Error converting file name to string ".red(),
+                    "{}{}{:?}",
+                    " ERROR ".black().on_red(),
+                    " converting file name to string ".red(),
                     file_path.red(),
-                    ". File skipped".red()
                 );
                 return;
             };
@@ -362,11 +374,18 @@ async fn copy_files(
                     *images_renamed.lock().await += 1;
                     break;
                 } else {
+                    // eprintln!(
+                    //     "{}{}{}",
+                    //     " WARN ".black().on_yellow(),
+                    //     " Failed to copy file.".yellow(),
+                    //     " Retrying...".yellow()
+                    // );
                     attempt += 1;
                     if attempt >= max_retries {
                         eprintln!(
-                            "{}{}",
-                            "Max retries reached. Skipping file: ".red(),
+                            "{}{}{}",
+                            " ERROR ".black().on_red(),
+                            " Max retries reached. Skipping file: ".red(),
                             file_name.red()
                         );
                         break;
@@ -444,7 +463,8 @@ async fn get_extensions(mut files: ReadDir) -> Result<Vec<String>, inquire::Inqu
 
         let Ok(file_name) = file.file_name().into_string() else {
             eprintln!(
-                "Error converting file name to string {:?}. File skipped",
+                "{} Failed converting file name to string {:?}. File skipped",
+                " ERROR ".black().on_red(),
                 file_path
             );
             continue;
@@ -455,7 +475,8 @@ async fn get_extensions(mut files: ReadDir) -> Result<Vec<String>, inquire::Inqu
                 extension
             } else {
                 eprintln!(
-                    "Error getting file extension from {}. File skipped",
+                    "{} Failed to get file extension from {}. File skipped",
+                    " ERROR ".black().on_red(),
                     file_name
                 );
                 continue;
