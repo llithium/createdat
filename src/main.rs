@@ -1,3 +1,5 @@
+mod test;
+
 use std::{
     env::current_dir,
     error::Error,
@@ -360,7 +362,6 @@ async fn copy_files(
                     *images_renamed.lock().await += 1;
                     break;
                 } else {
-                    // eprintln!("{}{}. Retrying...", "Error copying file: ".yellow(), err);
                     attempt += 1;
                     if attempt >= max_retries {
                         eprintln!(
