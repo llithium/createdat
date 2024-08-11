@@ -52,7 +52,11 @@ struct Cli {
     #[arg(short, long)]
     date: bool,
 
-    /// Set the name of the folder for renamed images (default: Renamed)
+    /// Set the source folder for images
+    #[arg(short = 'S', long, value_name = "Name")]
+    source: Option<String>,
+
+    /// Set the target folder for renamed images (default: renamed)
     #[arg(short = 'F', long, value_name = "Name")]
     folder: Option<String>,
 
@@ -72,16 +76,24 @@ struct Cli {
 async fn main() -> Result<(), Box<dyn Error>> {
     inquire::set_global_render_config(get_render_config());
     let cli = Arc::new(Cli::parse());
+    let source_folder: PathBuf = if let Some(name) = cli.source.as_deref() {
+        PathBuf::from(name.trim())
+    } else {
+        match current_dir() {
+            Ok(dir) => dir,
+            Err(err) => return Err(err.into()),
+        }
+    };
     let renamed_folder: PathBuf = if let Some(name) = cli.folder.as_deref() {
-        PathBuf::from(sanitize_filename::sanitize(name.trim()))
+        PathBuf::from(name.trim())
     } else {
         PathBuf::from("renamed")
     };
-
+    let source_folder = Arc::new(source_folder);
     let image_name = String::new();
     let name = String::new();
-
-    let files = match read_dir(current_dir()?).await {
+    let source_folder = Arc::clone(&source_folder);
+    let files = match read_dir(source_folder.as_ref()).await {
         Ok(files) => files,
         Err(err) => {
             eprintln!(
@@ -107,10 +119,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if !cli.preview {
         if renamed_folder.exists() && renamed_folder.read_dir()?.next().is_some() {
             {
-                eprintln!(
-                    "Folder {} already exists",
-                    renamed_folder.to_str().unwrap_or_default()
-                );
+                eprintln!("Folder {:?} already exists", renamed_folder);
                 return Ok(());
             }
         }
@@ -128,8 +137,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let renamed_folder_clone = Arc::clone(&renamed_folder);
     let duplicate: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
 
-    let (images_renamed, total_images, _duplicate) = match copy_files(
+    let (images_renamed, total_images, duplicate) = match copy_files(
         cli_clone,
+        source_folder,
         renamed_folder_clone,
         extension_selections,
         name,
@@ -138,37 +148,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .await
     {
-        Ok(result) => {
-            if cli.preview {
-                return Ok(());
-            }
-            match result.2 {
-                0 => result,
-                count if count > 1 => {
-                    eprintln!(
+        Ok(result) => match result.2 {
+            0 => result,
+            count if count > 1 => {
+                eprintln!(
                         "{} Duplicate creation times found. (Use '{}' or '{}' to include original unique names)",
                         " ERROR ".black().on_red(),
                         "-k".yellow(),
                         "--keep".yellow()
                     );
-                    remove_dir_all(renamed_folder.as_ref()).await?;
-                    return Ok(());
-                }
-                1 => {
-                    eprintln!(
+                remove_dir_all(renamed_folder.as_ref()).await?;
+                return Ok(());
+            }
+            1 => {
+                eprintln!(
                         "{} Duplicate creation time found. (Use '{}' or '{}' to include original unique names)",
                         " ERROR ".black().on_red(),
                         "-k".yellow(),
                         "--keep".yellow()
                     );
-                    remove_dir_all(renamed_folder.as_ref()).await?;
-                    return Ok(());
-                }
-                _ => return Ok(()),
+                remove_dir_all(renamed_folder.as_ref()).await?;
+                return Ok(());
             }
-        }
+            _ => return Ok(()),
+        },
         Err(err) => return Err(err),
     };
+    if cli.preview {
+        if duplicate > 0 {
+            println!(
+        "{} There would be files with current options. (Use '{}' or '{}' to include original unique names)",
+        " ERROR ".black().on_red(),
+        "-k".yellow(),
+        "--keep".yellow()
+    );
+        }
+        return Ok(());
+    }
     let renamed_folder = Arc::clone(&renamed_folder);
     let cli = Arc::clone(&cli);
 
@@ -184,13 +200,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn copy_files(
     cli: Arc<Cli>,
+    source_folder: Arc<PathBuf>,
     renamed_folder: Arc<PathBuf>,
     extension_selections: Vec<String>,
     name: String,
     image_name: String,
     duplicate: Arc<Mutex<u32>>,
 ) -> Result<(u32, u32, u32), Box<dyn Error>> {
-    let mut files = match read_dir(current_dir()?).await {
+    let mut files = match read_dir(source_folder.as_ref()).await {
         Ok(files) => files,
         Err(err) => {
             eprintln!(
@@ -440,9 +457,33 @@ async fn print_summary(
         std::time::Duration::default()
     });
     if cli.all || cli.extension {
+        if images_renamed == total_images {
+            Ok(println!(
+                "{}{}{}{}{}{}{:?}",
+                " ".on_green(),
+                images_renamed.black().on_green(),
+                "/".black().on_green(),
+                total_images.black().on_green(),
+                " ".on_green(),
+                " Files renamed in ".green(),
+                end_time.green()
+            ))
+        } else {
+            Ok(println!(
+                "{}/{} Files renamed in {:?}",
+                images_renamed, total_images, end_time
+            ))
+        }
+    } else if images_renamed == total_images {
         Ok(println!(
-            "{}/{} Files renamed in {:?}",
-            images_renamed, total_images, end_time
+            "{}{}{}{}{}{}{:?}",
+            " ".on_green(),
+            images_renamed.black().on_green(),
+            "/".black().on_green(),
+            total_images.black().on_green(),
+            " ".on_green(),
+            " Images renamed in ".green(),
+            end_time.green()
         ))
     } else {
         Ok(println!(
