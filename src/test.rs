@@ -1,22 +1,18 @@
-use std::{
-    fs::read_dir,
-    io::{self, Write},
-};
-
-use assert_cmd::Command;
-use assert_fs::prelude::{FileTouch, PathChild, PathCreateDir};
-use chrono::{DateTime, Local, Utc};
-
-#[cfg(test)]
 mod tests {
+    #[cfg(test)]
+    use assert_cmd::Command;
+    #[cfg(test)]
+    use assert_fs::prelude::PathCreateDir;
+    #[cfg(test)]
+    use assert_fs::prelude::{FileTouch, PathChild};
+    #[cfg(test)]
+    use chrono::{DateTime, Local, Utc};
+    #[cfg(test)]
     use std::{
         fs::read_dir,
         io::{self, Write},
     };
 
-    use assert_cmd::Command;
-    use assert_fs::prelude::*;
-    use chrono::{DateTime, Local, Utc};
     #[test]
     fn no_flags() {
         let temp = assert_fs::TempDir::new().unwrap();
@@ -365,48 +361,48 @@ mod tests {
         );
         temp.close().unwrap();
     }
-}
-#[test]
-fn source() {
-    let temp = assert_fs::TempDir::new().unwrap();
-    let test_image = temp.child("test.jpg");
-    let test_video = temp.child("test.mp4");
-    let test_dotfile = temp.child(".gitignore");
-    let test_dir = temp.child("test");
-    test_dir.create_dir_all().unwrap();
-    test_image.touch().unwrap();
-    test_video.touch().unwrap();
-    test_dotfile.touch().unwrap();
+    #[test]
+    fn source() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let test_image = temp.child("test.jpg");
+        let test_video = temp.child("test.mp4");
+        let test_dotfile = temp.child(".gitignore");
+        let test_dir = temp.child("test");
+        test_dir.create_dir_all().unwrap();
+        test_image.touch().unwrap();
+        test_video.touch().unwrap();
+        test_dotfile.touch().unwrap();
 
-    let mut cmd = Command::cargo_bin("createdat").unwrap();
+        let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-    let now = Utc::now();
-    let now_local: DateTime<Local> = now.into();
-    let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
+        let now = Utc::now();
+        let now_local: DateTime<Local> = now.into();
+        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
 
-    let output = cmd
-        .current_dir(temp.path().join(test_dir.path()))
-        .args(["-ak", "-S", "../"])
-        .output()
-        .unwrap();
-    io::stdout().write_all(&output.stdout).unwrap();
-    io::stderr().write_all(&output.stderr).unwrap();
-    let files: Vec<_> = read_dir(temp.path().join(test_dir.path().join("renamed")))
-        .unwrap()
-        .filter_map(Result::ok)
-        .collect();
+        let output = cmd
+            .current_dir(temp.path().join(test_dir.path()))
+            .args(["-ak", "-S", "../"])
+            .output()
+            .unwrap();
+        io::stdout().write_all(&output.stdout).unwrap();
+        io::stderr().write_all(&output.stderr).unwrap();
+        let files: Vec<_> = read_dir(temp.path().join(test_dir.path().join("renamed")))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
 
-    assert_eq!(
-        format!("{}.gitignore", now_formatted),
-        files.first().unwrap().file_name().into_string().unwrap()
-    );
-    assert_eq!(
-        format!("test {}.jpg", now_formatted),
-        files.get(1).unwrap().file_name().into_string().unwrap()
-    );
-    assert_eq!(
-        format!("test {}.mp4", now_formatted),
-        files.get(2).unwrap().file_name().into_string().unwrap()
-    );
-    temp.close().unwrap();
+        assert_eq!(
+            format!("{}.gitignore", now_formatted),
+            files.first().unwrap().file_name().into_string().unwrap()
+        );
+        assert_eq!(
+            format!("test {}.jpg", now_formatted),
+            files.get(1).unwrap().file_name().into_string().unwrap()
+        );
+        assert_eq!(
+            format!("test {}.mp4", now_formatted),
+            files.get(2).unwrap().file_name().into_string().unwrap()
+        );
+        temp.close().unwrap();
+    }
 }

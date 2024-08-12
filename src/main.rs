@@ -330,18 +330,16 @@ async fn copy_files(
 
             let image_destination = if cli.suffix {
                 if cli.front {
-                    PathBuf::from(format!(
-                        "{}/{}{}{}.{}",
-                        renamed_folder.to_str().unwrap_or_default(),
+                    renamed_folder.join(format!(
+                        "{}{}{}.{}",
                         image_modified_at_time,
                         image_name,
                         name.trim_end(),
                         file_extension
                     ))
                 } else {
-                    PathBuf::from(format!(
-                        "{}/{}{}{}.{}",
-                        renamed_folder.to_str().unwrap_or_default(),
+                    renamed_folder.join(format!(
+                        "{}{}{}.{}",
                         image_name,
                         image_modified_at_time,
                         name.trim_end(),
@@ -349,22 +347,14 @@ async fn copy_files(
                     ))
                 }
             } else if cli.front {
-                PathBuf::from(format!(
-                    "{}/{}{}{}.{}",
-                    renamed_folder.to_str().unwrap_or_default(),
-                    image_modified_at_time,
-                    name,
-                    image_name,
-                    file_extension
+                renamed_folder.join(format!(
+                    "{}{}{}.{}",
+                    image_modified_at_time, name, image_name, file_extension
                 ))
             } else {
-                PathBuf::from(format!(
-                    "{}/{}{}{}.{}",
-                    renamed_folder.to_str().unwrap_or_default(),
-                    name,
-                    image_name,
-                    image_modified_at_time,
-                    file_extension
+                renamed_folder.join(format!(
+                    "{}{}{}.{}",
+                    name, image_name, image_modified_at_time, file_extension
                 ))
             };
 
