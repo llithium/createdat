@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let image_name = String::new();
     let name = String::new();
     let source_folder = Arc::clone(&source_folder);
-    let files = match read_dir(source_folder.as_ref()).await {
+    let mut files = match read_dir(source_folder.as_ref()).await {
         Ok(files) => files,
         Err(err) => {
             eprintln!(
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     let extension_selections = if cli.extension {
-        if let Ok(selections) = get_extensions(files).await {
+        if let Ok(selections) = get_extensions(&mut files).await {
             selections
         } else {
             vec![]
@@ -138,8 +138,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let duplicate: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
 
     let (images_renamed, total_images, duplicate) = match copy_files(
+        files,
         cli_clone,
-        source_folder,
         renamed_folder_clone,
         extension_selections,
         name,
@@ -199,26 +199,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn copy_files(
+    mut files: ReadDir,
     cli: Arc<Cli>,
-    source_folder: Arc<PathBuf>,
     renamed_folder: Arc<PathBuf>,
     extension_selections: Vec<String>,
     name: String,
     image_name: String,
     duplicate: Arc<Mutex<u32>>,
 ) -> Result<(u32, u32, u32), Box<dyn Error>> {
-    let mut files = match read_dir(source_folder.as_ref()).await {
-        Ok(files) => files,
-        Err(err) => {
-            eprintln!(
-                "{} {}",
-                " ERROR READING DIRECTORY ".black().on_red(),
-                err.red()
-            );
-            return Err(err.into());
-        }
-    };
-
     let total_images: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
     let images_renamed: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
     let mut tasks: Vec<JoinHandle<()>> = vec![];
@@ -483,7 +471,7 @@ async fn print_summary(
     }
 }
 
-async fn get_extensions(mut files: ReadDir) -> Result<Vec<String>, inquire::InquireError> {
+async fn get_extensions(files: &mut ReadDir) -> Result<Vec<String>, inquire::InquireError> {
     let mut file_extension_options: Vec<String> = vec![];
     while let Ok(Some(file)) = files.next_entry().await {
         let file_path = file.path();
