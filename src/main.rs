@@ -178,7 +178,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if cli.preview {
         if file_count.duplicate > 0 {
             println!(
-        "{} There would be files with current options. (Use '{}' or '{}' to include original unique names)",
+        "{} Files would be overwritten with the current options. (Use '{}' or '{}' to include original unique names)",
         " ERROR ".black().on_red(),
         "-k".yellow(),
         "--keep".yellow()
@@ -310,7 +310,7 @@ async fn print_summary(
             eprintln!("No files found");
         } else {
             eprintln!(
-                "No images or wrong image formats. (Use '{}' or '{}' to rename any files found)",
+                "No images found. (Use '{}' or '{}' to rename any files found)",
                 "-a".yellow(),
                 "--all".yellow()
             );
