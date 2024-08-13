@@ -92,7 +92,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let source_folder = Arc::new(source_folder);
     let image_name = String::new();
     let name = String::new();
-    let source_folder = Arc::clone(&source_folder);
     let mut files = match read_dir(source_folder.as_ref()).await {
         Ok(files) => files,
         Err(err) => {
@@ -133,14 +132,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     let renamed_folder = Arc::new(renamed_folder);
-    let cli_clone = Arc::clone(&cli);
-    let renamed_folder_clone = Arc::clone(&renamed_folder);
     let duplicate: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
 
     let (images_renamed, total_images, duplicate) = match copy_files(
         files,
-        cli_clone,
-        renamed_folder_clone,
+        cli.clone(),
+        renamed_folder.clone(),
         extension_selections,
         name,
         image_name,
@@ -185,8 +182,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         return Ok(());
     }
-    let renamed_folder = Arc::clone(&renamed_folder);
-    let cli = Arc::clone(&cli);
 
     print_summary(
         start_time,
@@ -212,14 +207,14 @@ async fn copy_files(
     let mut tasks: Vec<JoinHandle<()>> = vec![];
 
     while let Ok(Some(file)) = files.next_entry().await {
-        let total_images = Arc::clone(&total_images);
-        let images_renamed = Arc::clone(&images_renamed);
-        let renamed_folder = Arc::clone(&renamed_folder);
-        let duplicate = Arc::clone(&duplicate);
-        let cli = Arc::clone(&cli);
         let extension_selections = extension_selections.clone();
         let mut name = name.clone();
         let mut image_name = image_name.clone();
+        let total_images = total_images.clone();
+        let images_renamed = images_renamed.clone();
+        let renamed_folder = renamed_folder.clone();
+        let duplicate = duplicate.clone();
+        let cli = cli.clone();
         let task = tokio::task::spawn(async move {
             let _permit = PERMITS.acquire().await.unwrap();
             let file_path = file.path();
@@ -410,8 +405,6 @@ async fn print_summary(
     renamed_folder: Arc<PathBuf>,
     cli: Arc<Cli>,
 ) -> Result<(), Box<dyn Error>> {
-    let renamed_folder = Arc::clone(&renamed_folder);
-    let cli = Arc::clone(&cli);
     if images_renamed == 0 {
         remove_dir(renamed_folder.as_ref()).await?;
         if cli.extension {
