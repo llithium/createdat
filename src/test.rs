@@ -17,6 +17,26 @@ mod tests {
         io::{self, Write},
     };
 
+    #[cfg(test)]
+    fn setup() -> (
+        assert_fs::TempDir,
+        chrono::format::DelayedFormat<chrono::format::StrftimeItems<'static>>,
+    ) {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let test_image = temp.child("test.jpg");
+        let test_video = temp.child("test.mp4");
+        let test_dotfile = temp.child(".gitignore");
+        test_image.touch().unwrap();
+        test_video.touch().unwrap();
+        test_dotfile.touch().unwrap();
+
+        let now = Utc::now();
+        let now_local: DateTime<Local> = now.into();
+        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
+
+        (temp, now_formatted)
+    }
+
     #[test]
     fn no_flags() {
         let temp = assert_fs::TempDir::new().unwrap();
@@ -24,7 +44,6 @@ mod tests {
         test_image.touch().unwrap();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
-
         let now = Utc::now();
         let now_local: DateTime<Local> = now.into();
         let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
@@ -48,19 +67,10 @@ mod tests {
 
     #[test]
     fn all() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-        let now = Utc::now();
-        let now_local: DateTime<Local> = now.into();
-        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
         let output = cmd.current_dir(temp.path()).arg("-a").output().unwrap();
         io::stdout().write_all(&output.stdout).unwrap();
         io::stderr().write_all(&output.stderr).unwrap();
@@ -86,19 +96,10 @@ mod tests {
 
     #[test]
     fn keep() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-        let now = Utc::now();
-        let now_local: DateTime<Local> = now.into();
-        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
         let output = cmd.current_dir(temp.path()).arg("-ak").output().unwrap();
         io::stdout().write_all(&output.stdout).unwrap();
         io::stderr().write_all(&output.stderr).unwrap();
@@ -123,19 +124,10 @@ mod tests {
     }
     #[test]
     fn name() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-        let now = Utc::now();
-        let now_local: DateTime<Local> = now.into();
-        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
         let output = cmd
             .current_dir(temp.path())
             .args(["-a", "testing"])
@@ -165,19 +157,10 @@ mod tests {
 
     #[test]
     fn folder() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-        let now = Utc::now();
-        let now_local: DateTime<Local> = now.into();
-        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
         let output = cmd
             .current_dir(temp.path())
             .args(["-ak", "-F", "testing"])
@@ -207,13 +190,7 @@ mod tests {
 
     #[test]
     fn twelve() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, _) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
@@ -244,19 +221,10 @@ mod tests {
     }
     #[test]
     fn front() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-        let now = Utc::now();
-        let now_local: DateTime<Local> = now.into();
-        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
         let output = cmd
             .current_dir(temp.path())
             .args(["-af", "testing"])
@@ -285,19 +253,10 @@ mod tests {
     }
     #[test]
     fn suffix() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-        let now = Utc::now();
-        let now_local: DateTime<Local> = now.into();
-        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
         let output = cmd
             .current_dir(temp.path())
             .args(["-as", "testing"])
@@ -326,13 +285,7 @@ mod tests {
     }
     #[test]
     fn date() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, _) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
@@ -367,21 +320,11 @@ mod tests {
     }
     #[test]
     fn source() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
+        let (temp, now_formatted) = setup();
         let test_dir = temp.child("test");
         test_dir.create_dir_all().unwrap();
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
-
-        let now = Utc::now();
-        let now_local: DateTime<Local> = now.into();
-        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
 
         let output = cmd
             .current_dir(temp.path().join(test_dir.path()))
@@ -412,19 +355,10 @@ mod tests {
 
     #[test]
     fn count() {
-        let temp = assert_fs::TempDir::new().unwrap();
-        let test_image = temp.child("test.jpg");
-        let test_video = temp.child("test.mp4");
-        let test_dotfile = temp.child(".gitignore");
-        test_image.touch().unwrap();
-        test_video.touch().unwrap();
-        test_dotfile.touch().unwrap();
+        let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-        let now = Utc::now();
-        let now_local: DateTime<Local> = now.into();
-        let now_formatted = now_local.format("%Y-%m-%d %H_%M_%S");
         let output = cmd.current_dir(temp.path()).arg("-a").output().unwrap();
 
         let files: Vec<_> = read_dir(temp.path().join("renamed"))
