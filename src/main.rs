@@ -52,12 +52,16 @@ struct Cli {
     #[arg(short, long)]
     date: bool,
 
+    /// Set custom date format to use (`%a %b %e %Y` = "Wed Jul 17 2024")
+    #[arg(long, value_name = "Format")]
+    format: Option<String>,
+
     /// Set the source folder for images
-    #[arg(short = 'S', long, value_name = "Name")]
+    #[arg(short = 'S', long, value_name = "Path")]
     source: Option<String>,
 
     /// Set the target folder for renamed images (default: renamed)
-    #[arg(short = 'F', long, value_name = "Name")]
+    #[arg(short = 'F', long, value_name = "Path")]
     folder: Option<String>,
 
     /// Put custom name after the date
@@ -220,7 +224,7 @@ async fn copy_files(
                 return;
             }
 
-            let image_destination = match get_image_destination(
+            let image_destination = if let Ok(img) = get_image_destination(
                 cli.clone(),
                 &file,
                 current_file,
@@ -231,16 +235,9 @@ async fn copy_files(
             )
             .await
             {
-                Ok(image_destination) => image_destination,
-                Err(err) => {
-                    eprintln!(
-                        "{}{}{}",
-                        " ERROR ".black().on_red(),
-                        " Error getting image destination ".red(),
-                        err.red()
-                    );
-                    return;
-                }
+                img
+            } else {
+                return;
             };
             if cli.preview {
                 println!("{image_destination:?}");
@@ -265,12 +262,6 @@ async fn copy_files(
                     file_count.lock().await.renamed += 1;
                     break;
                 } else {
-                    // eprintln!(
-                    //     "{}{}{}",
-                    //     " WARN ".black().on_yellow(),
-                    //     " Failed to copy file.".yellow(),
-                    //     " Retrying...".yellow()
-                    // );
                     attempt += 1;
                     if attempt >= max_retries {
                         eprintln!(
@@ -410,7 +401,9 @@ async fn get_extensions(files: &mut ReadDir) -> Result<Vec<String>, inquire::Inq
 async fn format_time(cli: Arc<Cli>, file: &DirEntry) -> String {
     let file_modified_at_system_time = file.metadata().await.unwrap().modified().unwrap();
     let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
-    if cli.date {
+    if let Some(format) = &cli.format {
+        sanitize_filename::sanitize(file_modified_at_date_time.format(format).to_string())
+    } else if cli.date {
         file_modified_at_date_time.format("%Y-%m-%d").to_string()
     } else if cli.twelve {
         file_modified_at_date_time
