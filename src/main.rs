@@ -2,7 +2,6 @@ mod test;
 
 use std::{
     env::current_dir,
-    error::Error,
     ffi::OsStr,
     path::{Path, PathBuf},
     str::FromStr,
@@ -10,6 +9,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Local};
 use clap::Parser;
 use inquire::{
@@ -23,6 +23,7 @@ use tokio::{
     sync::{Mutex, Semaphore},
     task::JoinHandle,
 };
+
 static PERMITS: Semaphore = Semaphore::const_new(15);
 
 /// Rename images with the date they were created
@@ -52,7 +53,7 @@ struct Cli {
     #[arg(short, long)]
     date: bool,
 
-    /// Set custom date format to use (`%a %b %e %Y` = "Wed Jul 17 2024")
+    /// Set custom date format to use ('%a %b %e %Y' = "Wed Jul 17 2024")
     #[arg(long, value_name = "Format")]
     format: Option<String>,
 
@@ -89,7 +90,7 @@ struct FileCount {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     inquire::set_global_render_config(get_render_config());
     let cli = Arc::new(Cli::parse());
     let source_folder: PathBuf = if let Some(name) = cli.source.as_deref() {
@@ -199,7 +200,7 @@ async fn copy_files(
     cli: Arc<Cli>,
     renamed_folder: Arc<PathBuf>,
     extension_selections: Vec<String>,
-) -> Result<FileCount, Box<dyn Error>> {
+) -> Result<FileCount> {
     let file_count = Arc::new(Mutex::new(FileCount {
         renamed: 0,
         total: 0,
@@ -290,7 +291,7 @@ async fn print_summary(
     file_count: FileCount,
     renamed_folder: Arc<PathBuf>,
     cli: Arc<Cli>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     if file_count.renamed == 0 {
         remove_dir(renamed_folder.as_ref()).await?;
         if cli.extension {
@@ -350,7 +351,7 @@ async fn print_summary(
     }
 }
 
-async fn get_extensions(files: &mut ReadDir) -> Result<Vec<String>, inquire::InquireError> {
+async fn get_extensions(files: &mut ReadDir) -> Result<Vec<String>> {
     let mut file_extension_options: Vec<String> = vec![];
     while let Ok(Some(file)) = files.next_entry().await {
         let file_path = file.path();
@@ -394,25 +395,27 @@ async fn get_extensions(files: &mut ReadDir) -> Result<Vec<String>, inquire::Inq
 
     match MultiSelect::new("Select file types to rename:", file_extension_options).prompt() {
         Ok(selections) => Ok(selections),
-        Err(err) => Err(err),
+        Err(err) => Err(err.into()),
     }
 }
 
-async fn format_time(cli: Arc<Cli>, file: &DirEntry) -> String {
-    let file_modified_at_system_time = file.metadata().await.unwrap().modified().unwrap();
+async fn format_time(cli: Arc<Cli>, file: &DirEntry) -> Result<String> {
+    let file_modified_at_system_time = file.metadata().await?.modified()?;
     let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
     if let Some(format) = &cli.format {
-        sanitize_filename::sanitize(file_modified_at_date_time.format(format).to_string())
+        Ok(sanitize_filename::sanitize(
+            file_modified_at_date_time.format(format).to_string(),
+        ))
     } else if cli.date {
-        file_modified_at_date_time.format("%Y-%m-%d").to_string()
+        Ok(file_modified_at_date_time.format("%Y-%m-%d").to_string())
     } else if cli.twelve {
-        file_modified_at_date_time
+        Ok(file_modified_at_date_time
             .format("%Y-%m-%d %I_%M_%S %p")
-            .to_string()
+            .to_string())
     } else {
-        file_modified_at_date_time
+        Ok(file_modified_at_date_time
             .format("%Y-%m-%d %H_%M_%S")
-            .to_string()
+            .to_string())
     }
 }
 
@@ -424,15 +427,14 @@ async fn get_image_destination(
     file_path: &Path,
     file_count: &mut FileCount,
     renamed_folder: Arc<PathBuf>,
-) -> Result<PathBuf, Box<dyn Error>> {
+) -> Result<PathBuf> {
     let Ok(file_name_with_extension) = file.file_name().into_string() else {
-        eprintln!(
+        return Err(anyhow!(
             "{}{}{:?}",
             " ERROR ".black().on_red(),
             " converting file name to string ".red(),
             file_path.red(),
-        );
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "")));
+        ));
     };
     let mut dotfile = false;
     let file_extension = if file_name_with_extension.starts_with('.') {
@@ -441,13 +443,12 @@ async fn get_image_destination(
             extension
         } else {
             {
-                eprintln!(
+                return Err(anyhow!(
                     "{}{}{}",
                     "Error getting file extension from ".red(),
                     file_name_with_extension.red(),
                     ". File skipped".red()
-                );
-                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "")));
+                ));
             }
         }
     } else {
@@ -457,17 +458,17 @@ async fn get_image_destination(
             .unwrap_or_default()
     };
     if cli.extension && !extension_selections.contains(&file_extension.to_owned()) {
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "")));
+        bail!("");
     }
     if !cli.all
         && !cli.extension
         && !mime_guess::from_path(file_path)
             .first()
-            .unwrap_or(Mime::from_str("Unknown/Unknown").unwrap())
+            .unwrap_or(Mime::from_str("unkown/unknown")?)
             .to_string()
             .starts_with("image")
     {
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "")));
+        bail!("")
     }
     file_count.total += 1;
 
@@ -500,7 +501,7 @@ async fn get_image_destination(
                 + " "
         }
     }
-    let image_modified_at_time = format_time(cli.clone(), file).await;
+    let image_modified_at_time = format_time(cli.clone(), file).await?;
     let image_destination = if cli.suffix {
         if cli.front {
             renamed_folder.join(format!(
