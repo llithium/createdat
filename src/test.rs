@@ -53,7 +53,7 @@ mod tests {
         let files = read_dir(temp.path().join("renamed")).unwrap();
 
         assert_eq!(
-            format!("{}.jpg", now_formatted),
+            format!("test {}.jpg", now_formatted),
             files
                 .filter_map(Result::ok)
                 .next()
@@ -84,23 +84,23 @@ mod tests {
             files.first().unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{}.jpg", now_formatted),
+            format!("test {}.jpg", now_formatted),
             files.get(1).unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{}.mp4", now_formatted),
+            format!("test {}.mp4", now_formatted),
             files.get(2).unwrap().file_name().into_string().unwrap()
         );
         temp.close().unwrap();
     }
 
     #[test]
-    fn keep() {
+    fn no_name() {
         let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
-        let output = cmd.current_dir(temp.path()).arg("-ak").output().unwrap();
+        let output = cmd.current_dir(temp.path()).arg("-an").output().unwrap();
         io::stdout().write_all(&output.stdout).unwrap();
         io::stderr().write_all(&output.stderr).unwrap();
         let files: Vec<_> = read_dir(temp.path().join("renamed"))
@@ -113,11 +113,11 @@ mod tests {
             files.first().unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("test {}.jpg", now_formatted),
+            format!("{}.jpg", now_formatted),
             files.get(1).unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("test {}.mp4", now_formatted),
+            format!("{}.mp4", now_formatted),
             files.get(2).unwrap().file_name().into_string().unwrap()
         );
         temp.close().unwrap();
@@ -145,11 +145,11 @@ mod tests {
             files.first().unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("testing {}.jpg", now_formatted),
+            format!("testing test {}.jpg", now_formatted),
             files.get(1).unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("testing {}.mp4", now_formatted),
+            format!("testing test {}.mp4", now_formatted),
             files.get(2).unwrap().file_name().into_string().unwrap()
         );
         temp.close().unwrap();
@@ -163,7 +163,7 @@ mod tests {
 
         let output = cmd
             .current_dir(temp.path())
-            .args(["-ak", "-F", "testing"])
+            .args(["-a", "-F", "testing"])
             .output()
             .unwrap();
         io::stdout().write_all(&output.stdout).unwrap();
@@ -197,7 +197,7 @@ mod tests {
         let now = Utc::now();
         let now_local: DateTime<Local> = now.into();
         let now_formatted = now_local.format("%Y-%m-%d %I_%M_%S %p");
-        let output = cmd.current_dir(temp.path()).arg("-akt").output().unwrap();
+        let output = cmd.current_dir(temp.path()).arg("-at").output().unwrap();
         io::stdout().write_all(&output.stdout).unwrap();
         io::stderr().write_all(&output.stderr).unwrap();
         let files: Vec<_> = read_dir(temp.path().join("renamed"))
@@ -238,15 +238,15 @@ mod tests {
             .collect();
 
         assert_eq!(
-            format!("{} testing.gitignore", now_formatted),
+            format!("{} testing test.jpg", now_formatted),
             files.first().unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{} testing.jpg", now_formatted),
+            format!("{} testing test.mp4", now_formatted),
             files.get(1).unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{} testing.mp4", now_formatted),
+            format!("{} testing.gitignore", now_formatted),
             files.get(2).unwrap().file_name().into_string().unwrap()
         );
         temp.close().unwrap();
@@ -274,11 +274,11 @@ mod tests {
             files.first().unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{} testing.jpg", now_formatted),
+            format!("test {} testing.jpg", now_formatted),
             files.get(1).unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{} testing.mp4", now_formatted),
+            format!("test {} testing.mp4", now_formatted),
             files.get(2).unwrap().file_name().into_string().unwrap()
         );
         temp.close().unwrap();
@@ -309,11 +309,11 @@ mod tests {
             files.first().unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{} testing.jpg", now_formatted),
+            format!("test {} testing.jpg", now_formatted),
             files.get(1).unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{} testing.mp4", now_formatted),
+            format!("test {} testing.mp4", now_formatted),
             files.get(2).unwrap().file_name().into_string().unwrap()
         );
         temp.close().unwrap();
@@ -328,7 +328,7 @@ mod tests {
 
         let output = cmd
             .current_dir(temp.path().join(test_dir.path()))
-            .args(["-ak", "-S", "../"])
+            .args(["-a", "-S", "../"])
             .output()
             .unwrap();
         io::stdout().write_all(&output.stdout).unwrap();
@@ -371,11 +371,11 @@ mod tests {
             files.first().unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{}.jpg", now_formatted),
+            format!("test {}.jpg", now_formatted),
             files.get(1).unwrap().file_name().into_string().unwrap()
         );
         assert_eq!(
-            format!("{}.mp4", now_formatted),
+            format!("test {}.mp4", now_formatted),
             files.get(2).unwrap().file_name().into_string().unwrap()
         );
 

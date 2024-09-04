@@ -41,9 +41,9 @@ struct Cli {
     #[arg(short, long)]
     front: bool,
 
-    /// Keep image's original name as prefix
+    /// Remove original filename
     #[arg(short, long)]
-    keep: bool,
+    no_name: bool,
 
     /// Use 12-hour time format instead of 24-hour
     #[arg(short, long)]
@@ -158,20 +158,16 @@ async fn main() -> Result<()> {
             0 => file_count,
             count if count > 1 => {
                 eprintln!(
-                        "{} Duplicate creation times found. (Use '{}' or '{}' to include original unique names)",
+                        "{} Duplicate creation times found. Files would be overwritten with current options",
                         " ERROR ".black().on_red(),
-                        "-k".yellow(),
-                        "--keep".yellow()
                     );
                 remove_dir_all(renamed_folder.as_ref()).await?;
                 return Ok(());
             }
             1 => {
                 eprintln!(
-                        "{} Duplicate creation time found. (Use '{}' or '{}' to include original unique names)",
+                        "{} Duplicate creation time found. Files would be overwritten with current options",
                         " ERROR ".black().on_red(),
-                        "-k".yellow(),
-                        "--keep".yellow()
                     );
                 remove_dir_all(renamed_folder.as_ref()).await?;
                 return Ok(());
@@ -183,11 +179,9 @@ async fn main() -> Result<()> {
     if cli.preview {
         if file_count.duplicate > 0 {
             println!(
-        "{} Files would be overwritten with the current options. (Use '{}' or '{}' to include original unique names)",
-        " ERROR ".black().on_red(),
-        "-k".yellow(),
-        "--keep".yellow()
-    );
+                "{} Files would be overwritten with the current options.",
+                " ERROR ".black().on_red(),
+            );
         }
         return Ok(());
     }
@@ -482,8 +476,13 @@ async fn get_image_destination(
             sanitize_filename::sanitize(String::from(entered_prefix).trim()).clone() + " "
         }
     }
-    if cli.keep {
-        current_file.original_name = if cli.front {
+    if !cli.no_name {
+        current_file.original_name = if cli.front && dotfile {
+            file_name_with_extension
+                .strip_suffix(&format!(".{file_extension}"))
+                .unwrap_or_default()
+                .to_string()
+        } else if cli.front {
             " ".to_owned()
                 + file_name_with_extension
                     .strip_suffix(&format!(".{file_extension}"))
