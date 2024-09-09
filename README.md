@@ -37,10 +37,27 @@ createdat
 
 ```
 
-To view all available options, run:
+Available options
 
-```shell
+```
 
-createdat --help
+Arguments:
+  [NAME]  Optional prefix for renamed images
+
+Options:
+  -e, --extension        Choose which files to rename based on file extension
+  -f, --front            Put date in front of filename
+  -n, --no-name          Remove original filename
+  -t, --twelve           Use 12-hour time format instead of 24-hour
+  -d, --date             Date without time
+      --format <Format>  Set custom date format to use ('%a %b %e %Y' = "Wed Jul 17 2024")
+  -S, --source <Path>    Set the source folder for images
+  -F, --folder <Path>    Set the target folder for renamed images (default: renamed)
+  -s, --suffix           Put custom name after the date
+  -p, --preview          Preview the name format of renamed files
+  -a, --all              Rename all files, not just images
+  -h, --help             Print help
+  -V, --version          Print version
+
 
 ```
