@@ -1,3 +1,4 @@
+mod cli;
 mod test;
 
 use std::{
@@ -12,6 +13,7 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Local};
 use clap::Parser;
+use cli::Cli;
 use inquire::{
     ui::{RenderConfig, Styled},
     MultiSelect,
@@ -26,57 +28,6 @@ use tokio::{
 
 static PERMITS: Semaphore = Semaphore::const_new(15);
 
-/// Rename images with the date they were created
-#[derive(Parser)]
-#[command(version, about, long_about = None)]
-struct Cli {
-    /// Optional prefix for renamed images
-    name: Option<String>,
-
-    /// Choose which files to rename based on file extension
-    #[arg(short, long)]
-    extension: bool,
-
-    /// Put date in front of filename
-    #[arg(short, long)]
-    front: bool,
-
-    /// Remove original filename
-    #[arg(short, long)]
-    no_name: bool,
-
-    /// Use 12-hour time format instead of 24-hour
-    #[arg(short, long)]
-    twelve: bool,
-
-    /// Date without time
-    #[arg(short, long)]
-    date: bool,
-
-    /// Set custom date format to use ('%a %b %e %Y' = "Wed Jul 17 2024")
-    #[arg(long, value_name = "Format")]
-    format: Option<String>,
-
-    /// Set the source folder for images
-    #[arg(short = 'S', long, value_name = "Path")]
-    source: Option<String>,
-
-    /// Set the target folder for renamed images (default: renamed)
-    #[arg(short = 'F', long, value_name = "Path")]
-    folder: Option<String>,
-
-    /// Put custom name after the date
-    #[arg(short, long)]
-    suffix: bool,
-
-    /// Preview the name format of renamed files
-    #[arg(short, long)]
-    preview: bool,
-
-    /// Rename all files, not just images
-    #[arg(short, long)]
-    all: bool,
-}
 struct CurrentFile {
     user_added_name: String,
     original_name: String,
