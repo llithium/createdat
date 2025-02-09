@@ -186,7 +186,7 @@ async fn copy_files(
                 return;
             };
             if cli.preview {
-                println!("{image_destination:?}");
+                println!("{}", image_destination.display());
                 return;
             }
 
