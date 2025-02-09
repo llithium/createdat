@@ -27,6 +27,10 @@ pub struct Cli {
     #[arg(short, long)]
     pub date: bool,
 
+    /// Use spaces instead of underscore under scores in name
+    #[arg(long)]
+    pub space: bool,
+
     /// Set custom date format to use ('%a %b %e %Y' = "Wed Jul 17 2024")
     #[arg(long, value_name = "Format")]
     pub format: Option<String>,

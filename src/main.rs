@@ -347,6 +347,8 @@ async fn get_extensions(files: &mut ReadDir) -> Result<Vec<String>> {
 async fn format_time(cli: Arc<Cli>, file: &DirEntry) -> Result<String> {
     let file_modified_at_system_time = file.metadata().await?.modified()?;
     let file_modified_at_date_time: DateTime<Local> = file_modified_at_system_time.into();
+    let space_char = get_space_character(cli.clone());
+
     if let Some(format) = &cli.format {
         Ok(sanitize_filename::sanitize(
             file_modified_at_date_time.format(format).to_string(),
@@ -355,11 +357,11 @@ async fn format_time(cli: Arc<Cli>, file: &DirEntry) -> Result<String> {
         Ok(file_modified_at_date_time.format("%Y-%m-%d").to_string())
     } else if cli.twelve {
         Ok(file_modified_at_date_time
-            .format("%Y-%m-%d %I_%M_%S %p")
+            .format(&format!("%Y-%m-%d{}%I_%M_%S{}%p", space_char, space_char))
             .to_string())
     } else {
         Ok(file_modified_at_date_time
-            .format("%Y-%m-%d %H_%M_%S")
+            .format(&format!("%Y-%m-%d{}%H_%M_%S", space_char))
             .to_string())
     }
 }
@@ -416,13 +418,13 @@ async fn get_image_destination(
         bail!("")
     }
     file_count.total += 1;
-
+    let space_char = get_space_character(cli.clone());
     if let Some(entered_prefix) = cli.name.as_deref() {
         current_file.user_added_name = if cli.front {
-            " ".to_owned()
+            space_char.clone()
                 + &sanitize_filename::sanitize(String::from(entered_prefix).trim()).clone()
         } else if cli.suffix {
-            " ".to_owned() + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
+            space_char.clone() + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
         } else {
             sanitize_filename::sanitize(String::from(entered_prefix).trim()).clone() + " "
         }
@@ -434,7 +436,7 @@ async fn get_image_destination(
                 .unwrap_or_default()
                 .to_string()
         } else if cli.front {
-            " ".to_owned()
+            space_char
                 + file_name_with_extension
                     .strip_suffix(&format!(".{file_extension}"))
                     .unwrap_or_default()
@@ -488,6 +490,14 @@ async fn get_image_destination(
         ))
     };
     Ok(image_destination)
+}
+
+fn get_space_character(cli: Arc<Cli>) -> String {
+    if cli.space {
+        " ".to_owned()
+    } else {
+        "_".to_owned()
+    }
 }
 
 fn get_render_config() -> RenderConfig<'static> {
