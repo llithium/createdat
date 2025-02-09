@@ -68,11 +68,7 @@ async fn main() -> Result<()> {
         }
     };
     let extension_selections = if cli.extension {
-        if let Ok(selections) = get_extensions(&mut files).await {
-            selections
-        } else {
-            vec![]
-        }
+        (get_extensions(&mut files).await).unwrap_or_default()
     } else {
         vec![]
     };
@@ -261,7 +257,7 @@ async fn print_summary(
     });
     if cli.all || cli.extension {
         if file_count.renamed == file_count.total {
-            Ok(println!(
+            println!(
                 "{}{}{}{}{}{}{:?}",
                 " ".on_green(),
                 file_count.renamed.black().on_green(),
@@ -270,15 +266,17 @@ async fn print_summary(
                 " ".on_green(),
                 " Files renamed in ".green(),
                 end_time.green()
-            ))
+            );
+            Ok(())
         } else {
-            Ok(println!(
+            println!(
                 "{}/{} Files renamed in {:?}",
                 file_count.renamed, file_count.total, end_time
-            ))
+            );
+            Ok(())
         }
     } else if file_count.renamed == file_count.total {
-        Ok(println!(
+        println!(
             "{}{}{}{}{}{}{:?}",
             " ".on_green(),
             file_count.renamed.black().on_green(),
@@ -287,12 +285,14 @@ async fn print_summary(
             " ".on_green(),
             " Images renamed in ".green(),
             end_time.green()
-        ))
+        );
+        Ok(())
     } else {
-        Ok(println!(
+        println!(
             "{}/{} Images renamed in {:?}",
             file_count.renamed, file_count.total, end_time
-        ))
+        );
+        Ok(())
     }
 }
 
