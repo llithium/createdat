@@ -357,11 +357,11 @@ async fn format_time(cli: Arc<Cli>, file: &DirEntry) -> Result<String> {
         Ok(file_modified_at_date_time.format("%Y-%m-%d").to_string())
     } else if cli.twelve {
         Ok(file_modified_at_date_time
-            .format(&format!("%Y-%m-%d{}%I_%M_%S{}%p", space_char, space_char))
+            .format(&format!("%Y-%m-%d{}%I-%M-%S-%p", space_char))
             .to_string())
     } else {
         Ok(file_modified_at_date_time
-            .format(&format!("%Y-%m-%d{}%H_%M_%S", space_char))
+            .format(&format!("%Y-%m-%d{}%H-%M-%S", space_char))
             .to_string())
     }
 }
@@ -418,15 +418,15 @@ async fn get_image_destination(
         bail!("")
     }
     file_count.total += 1;
-    let space_char = get_space_character(cli.clone());
     if let Some(entered_prefix) = cli.name.as_deref() {
         current_file.user_added_name = if cli.front {
-            space_char.clone()
+            get_filename_delimiter()
                 + &sanitize_filename::sanitize(String::from(entered_prefix).trim()).clone()
         } else if cli.suffix {
-            space_char.clone() + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
+            get_filename_delimiter()
+                + &sanitize_filename::sanitize(String::from(entered_prefix).trim())
         } else {
-            sanitize_filename::sanitize(String::from(entered_prefix).trim()).clone() + " "
+            sanitize_filename::sanitize(String::from(entered_prefix).trim()).clone() + "-"
         }
     }
     if !cli.no_name {
@@ -436,7 +436,7 @@ async fn get_image_destination(
                 .unwrap_or_default()
                 .to_string()
         } else if cli.front {
-            space_char
+            get_filename_delimiter()
                 + file_name_with_extension
                     .strip_suffix(&format!(".{file_extension}"))
                     .unwrap_or_default()
@@ -450,7 +450,7 @@ async fn get_image_destination(
                 .strip_suffix(&format!(".{file_extension}"))
                 .unwrap_or_default()
                 .to_string()
-                + " "
+                + &get_filename_delimiter()
         }
     }
     let image_modified_at_time = format_time(cli.clone(), file).await?;
@@ -499,7 +499,9 @@ fn get_space_character(cli: Arc<Cli>) -> String {
         "_".to_owned()
     }
 }
-
+fn get_filename_delimiter() -> String {
+    "-".to_owned()
+}
 fn get_render_config() -> RenderConfig<'static> {
     RenderConfig::<'_> {
         unselected_checkbox: Styled::new("○"),
