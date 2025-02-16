@@ -76,12 +76,6 @@ async fn main() -> Result<()> {
     let start_time = SystemTime::now();
 
     if !cli.preview {
-        if renamed_folder.exists() && renamed_folder.read_dir()?.next().is_some() {
-            {
-                eprintln!("Folder {:?} already exists", renamed_folder);
-                return Ok(());
-            }
-        }
         if let Err(err) = create_dir_all(renamed_folder.clone()).await {
             eprintln!(
                 "{} {}",
