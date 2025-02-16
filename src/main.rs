@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     } else {
         current_dir()?
     };
-    let renamed_folder: PathBuf = if let Some(name) = cli.folder.as_deref() {
+    let renamed_folder: PathBuf = if let Some(name) = cli.target.as_deref() {
         PathBuf::from(name.trim())
     } else {
         PathBuf::from("renamed")
@@ -99,17 +99,18 @@ async fn main() -> Result<()> {
             0 => file_count,
             count if count > 1 => {
                 eprintln!(
-                        "{} Duplicate creation times found. Files would be overwritten with current options",
-                        " ERROR ".black().on_red(),
-                    );
-                remove_dir_all(renamed_folder.as_ref()).await?;
+                    "{} {} Duplicate names was skipped.",
+                    " WARNING ".black().on_yellow(),
+                    count.yellow()
+                );
                 return Ok(());
             }
             1 => {
                 eprintln!(
-                        "{} Duplicate creation time found. Files would be overwritten with current options",
-                        " ERROR ".black().on_red(),
-                    );
+                    "{} {} Duplicate names were skipped.",
+                    " WARNING ".black().on_yellow(),
+                    file_count.duplicate.yellow()
+                );
                 remove_dir_all(renamed_folder.as_ref()).await?;
                 return Ok(());
             }
@@ -120,8 +121,10 @@ async fn main() -> Result<()> {
     if cli.preview {
         if file_count.duplicate > 0 {
             println!(
-                "{} Files would be overwritten with the current options.",
-                " ERROR ".black().on_red(),
+                "{} {} {}",
+                " WARNING ".black().on_yellow(),
+                file_count.duplicate.yellow(),
+                "Files would be overwritten with the current options.".yellow()
             );
         }
         return Ok(());
@@ -182,9 +185,12 @@ async fn copy_files(
 
             if Path::new(&image_destination).exists() {
                 file_count.lock().await.duplicate += 1;
-                return;
-            }
-            if file_count.lock().await.duplicate > 0 {
+                println!(
+                    "{} {} {}",
+                    " WARNING ".black().on_yellow(),
+                    &image_destination.display().blue(),
+                    "already exists. Skipping.".yellow()
+                );
                 return;
             }
 
@@ -303,7 +309,7 @@ async fn get_extensions(files: &mut ReadDir) -> Result<Vec<String>> {
             eprintln!(
                 "{} Failed converting file name to string {:?}. File skipped",
                 " ERROR ".black().on_red(),
-                file_path
+                file_path.blue()
             );
             continue;
         };
@@ -315,7 +321,7 @@ async fn get_extensions(files: &mut ReadDir) -> Result<Vec<String>> {
                 eprintln!(
                     "{} Failed to get file extension from {}. File skipped",
                     " ERROR ".black().on_red(),
-                    file_name
+                    file_name.blue()
                 );
                 continue;
             }
@@ -374,7 +380,7 @@ async fn get_image_destination(
             "{}{}{:?}",
             " ERROR ".black().on_red(),
             " converting file name to string ".red(),
-            file_path.red(),
+            file_path.blue(),
         ));
     };
     let mut dotfile = false;
@@ -387,7 +393,7 @@ async fn get_image_destination(
                 return Err(anyhow!(
                     "{}{}{}",
                     "Error getting file extension from ".red(),
-                    file_name_with_extension.red(),
+                    file_name_with_extension.blue(),
                     ". File skipped".red()
                 ));
             }

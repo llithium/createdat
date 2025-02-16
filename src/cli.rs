@@ -40,8 +40,8 @@ pub struct Cli {
     pub source: Option<String>,
 
     /// Set the target folder for renamed images (default: renamed)
-    #[arg(short = 'F', long, value_name = "Path")]
-    pub folder: Option<String>,
+    #[arg(short = 'T', long, value_name = "Path")]
+    pub target: Option<String>,
 
     /// Put custom name after the date
     #[arg(short, long)]

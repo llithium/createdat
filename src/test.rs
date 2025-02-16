@@ -156,14 +156,14 @@ mod tests {
     }
 
     #[test]
-    fn folder() {
+    fn target() {
         let (temp, now_formatted) = setup();
 
         let mut cmd = Command::cargo_bin("createdat").unwrap();
 
         let output = cmd
             .current_dir(temp.path())
-            .args(["-a", "-F", "testing"])
+            .args(["-a", "-T", "testing"])
             .output()
             .unwrap();
         io::stdout().write_all(&output.stdout).unwrap();
