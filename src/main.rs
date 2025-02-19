@@ -144,7 +144,7 @@ async fn copy_files(
         total: 0,
         duplicate: 0,
     }));
-    let mut tasks: Vec<JoinHandle<()>> = vec![];
+    let mut tasks: Vec<JoinHandle<anyhow::Result<()>>> = Vec::new();
 
     while let Ok(Some(file)) = files.next_entry().await {
         let extension_selections = extension_selections.clone();
@@ -156,11 +156,11 @@ async fn copy_files(
         let renamed_folder = renamed_folder.clone();
         let cli = cli.clone();
         let task = tokio::task::spawn(async move {
-            let _permit = PERMITS.acquire().await.unwrap();
+            let _permit = PERMITS.acquire().await?;
             let file_path = file.path();
 
-            if file.metadata().await.unwrap().is_dir() {
-                return;
+            if file.metadata().await?.is_dir() {
+                return Ok(());
             }
 
             let image_destination = if let Ok(img) = get_image_destination(
@@ -176,11 +176,11 @@ async fn copy_files(
             {
                 img
             } else {
-                return;
+                return Ok(());
             };
             if cli.preview {
                 println!("{}", image_destination.display());
-                return;
+                return Ok(());
             }
 
             if Path::new(&image_destination).exists() {
@@ -191,7 +191,7 @@ async fn copy_files(
                     &image_destination.display().blue(),
                     "already exists. Skipping.".yellow()
                 );
-                return;
+                return Ok(());
             }
 
             let max_retries: u8 = 3;
@@ -202,7 +202,7 @@ async fn copy_files(
                 let copy_result = fs::copy(file.path(), image_destination.clone()).await;
                 if copy_result.is_ok() {
                     file_count.lock().await.renamed += 1;
-                    break;
+                    break Ok(());
                 } else {
                     attempt += 1;
                     if attempt >= max_retries {
@@ -212,7 +212,7 @@ async fn copy_files(
                             " Max retries reached. Skipping file: ".red(),
                             file.path().red()
                         );
-                        break;
+                        break Ok(());
                     }
                     tokio::time::sleep(Duration::from_millis(retry_delay_ms)).await;
                 }
@@ -221,7 +221,7 @@ async fn copy_files(
         tasks.push(task);
     }
     for task in tasks {
-        task.await?;
+        task.await??;
     }
     let file_count = *file_count.lock().await;
     Ok(file_count)
