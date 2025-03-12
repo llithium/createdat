@@ -1,5 +1,4 @@
 mod cli;
-mod test;
 
 use std::{
     env::current_dir,
