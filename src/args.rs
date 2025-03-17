@@ -3,7 +3,7 @@ use clap::Parser;
 /// Rename images with the date they were created
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
-pub struct Cli {
+pub struct Args {
     /// Optional prefix for renamed images
     pub name: Option<String>,
 
